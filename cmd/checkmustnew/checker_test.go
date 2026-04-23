@@ -382,6 +382,66 @@ func MustNewFilter[D any](s string) Filter[D] {
 	assert.Empty(t, violations)
 }
 
+func TestCheckPackageDir_MatchedCount(t *testing.T) {
+	t.Run("counts every VO constructor matched, including those missing MustNew", func(t *testing.T) {
+		dir := writeTestPackage(t, map[string]string{
+			"types.go": `package testpkg
+
+type CustomerID struct{ value string }
+type AccountID struct{ value string }
+type Amount struct{ value string }
+
+func NewCustomerID(value string) (CustomerID, error) { return CustomerID{value: value}, nil }
+func MustNewCustomerID(value string) CustomerID { v, _ := NewCustomerID(value); return v }
+
+func NewAccountID(value string) (AccountID, error) { return AccountID{value: value}, nil }
+func MustNewAccountID(value string) AccountID { v, _ := NewAccountID(value); return v }
+
+func NewAmount(value string) (Amount, error) { return Amount{value: value}, nil }
+`,
+		})
+
+		violations, matched, err := CheckPackageDir(dir, map[string]bool{})
+		require.NoError(t, err)
+		assert.Equal(t, 3, matched, "all three VO constructors should be counted")
+		assert.Len(t, violations, 1, "only Amount is missing MustNew")
+	})
+
+	t.Run("count is zero when no VO constructors are found", func(t *testing.T) {
+		dir := writeTestPackage(t, map[string]string{
+			"types.go": `package testpkg
+
+// Non-matching: factory (return type name differs from suffix).
+func NewCollect() Operation { return Operation{} }
+
+type Operation struct{}
+`,
+		})
+
+		_, matched, err := CheckPackageDir(dir, map[string]bool{})
+		require.NoError(t, err)
+		assert.Equal(t, 0, matched)
+	})
+
+	t.Run("excluded types are not counted", func(t *testing.T) {
+		dir := writeTestPackage(t, map[string]string{
+			"types.go": `package testpkg
+
+type Ledger struct{}
+type CustomerID struct{ value string }
+
+func NewLedger(spec string) (Ledger, error) { return Ledger{}, nil }
+func NewCustomerID(value string) (CustomerID, error) { return CustomerID{value: value}, nil }
+func MustNewCustomerID(value string) CustomerID { v, _ := NewCustomerID(value); return v }
+`,
+		})
+
+		_, matched, err := CheckPackageDir(dir, map[string]bool{"Ledger": true})
+		require.NoError(t, err)
+		assert.Equal(t, 1, matched, "Ledger is excluded; only CustomerID counts")
+	})
+}
+
 // --- helpers ---
 
 func parseSingleFunc(t *testing.T, src string) *ast.FuncDecl {
