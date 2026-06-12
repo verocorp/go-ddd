@@ -2,6 +2,19 @@
 
 Go DDD enforcement toolkit: analyzers, workflows, and CI actions for Go repos following domain-driven design conventions.
 
+## Why — the rationale layer
+
+Enforcement without a demonstrated reason gets ignored. [`rationale/`](rationale/)
+is the executable case: a neutral fixture (spaceflight navigation, anchored on
+the Mars Climate Orbiter unit-confusion loss) whose tests **assert** the wins —
+a `Feet`-where-`Meters` call that won't compile, `0°C == 273.15K` under value
+equality, a sub-absolute-zero temperature rejected at construction — plus
+benchmarks showing the honest cost (collection value objects pay a defensive-copy
+allocation a raw map doesn't). [`rationale/coverage.md`](rationale/coverage.md)
+maps each rule to its demo and its checker, with a meta-test that forbids silent
+gaps. [`docs/case-study.md`](docs/case-study.md) carries the magnitude measured on
+a real ~1,100-commit codebase.
+
 ## What's here
 
 ### `cmd/` — DDD convention checkers
