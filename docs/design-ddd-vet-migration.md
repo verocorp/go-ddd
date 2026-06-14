@@ -200,6 +200,17 @@ generally rather than `analysistest` specifically, which is what let the parked
 6. **equalitytest (#8) dropped, comparability (#7) widened (eng review).** The
    existence tripwire was traded for a structural check of the actual `==` hazard
    (pointer/interface fields). 7 analyzers ship. See Parked + Risks.
+7. **Action goes `.go-ddd.yaml`-only (eng review).** At Migrate, drop the
+   `mustnew-exclude` / `equality-exclude` Action inputs entirely (no back-compat
+   shims). Consumers (certus/metron/quanta) move their lists into the file; it is
+   accepted that they break until migrated. One way to say a thing, not two.
+8. **Compile-required is accepted (eng review).** `go vet` needs the consumer
+   package to build; an unrelated compile error now also reds the DDD check.
+   Accepted on purpose; document it in the Action README at Migrate.
+9. **Config cache: force a clean run for now (eng review).** At Migrate the Action
+   forces a fresh vet (e.g. `go clean -cache` or a scratch `GOCACHE`) so a
+   `.go-ddd.yaml` edit always takes effect, since `go/analysis` doesn't track the
+   file as an action input. The principled fix is parked (see Parked).
 
 ## Risks
 
@@ -287,6 +298,15 @@ NOT covered:  is the Test*_Equality / Equal logic actually CORRECT (hollow test,
 ```
 
 These are follow-up scope, not blockers for Add→Migrate→Remove.
+
+**Parked: cache-correct config.** The Migrate-time "force a clean vet run"
+(Decision 9) is a blunt fix that throws away `go vet`'s caching whenever excludes
+might have changed. The principled version: have the **Action** read
+`.go-ddd.yaml` and pass the resolved excludes as per-analyzer `-exclude` flags,
+instead of each analyzer reading the file from disk. Analyzer flags ARE part of
+`go vet`'s action cache key, so a changed exclude set would invalidate the cache
+correctly and a clean run would no longer be needed. Revisit when the clean-run
+cost (cold cache every CI run) actually bites.
 
 ## Out of scope
 
