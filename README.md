@@ -33,8 +33,8 @@ dividend is bought by the **standard**, not by the pattern. See
 multichecker. Run it standalone (`ddd-vet ./...`) or as a `go vet` tool
 (`go vet -vettool=$(command -v ddd-vet) ./...`). For editor diagnostics see
 [Editor integration](#editor-integration) below; gopls does *not* surface these
-analyzers (it only runs the analyzers compiled into it). The analyzers (each
-independently adoptable, a menu not all-or-nothing):
+analyzers. The analyzers (each independently adoptable, a menu not
+all-or-nothing):
 
 | Analyzer | What it enforces |
 |---|---|
