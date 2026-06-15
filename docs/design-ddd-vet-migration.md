@@ -1,13 +1,16 @@
 # Design: migrate the checkers to go/analysis + add the rubric checkers
 
 **Status:** Add phase BUILT and green (7 analyzers + generator + meta-test, all
-tests/vet/gofmt clean). Migrate BUILT: (a) `run-ddd-checks` now builds `ddd-vet`
-and runs it as a `go vet` tool — file-only config, forced cold cache,
-compile-required documented (Decisions 7–9); (b) every reference to the old
-checkers repointed to the analyzers — README, CLAUDE.md, coverage.md +
-coverage_test.go (guard now keys off `analyzers.All`), design-three-contender — so
-the silent-gap guard stays live and Remove is a pure deletion. Remove (step 5,
-delete `cmd/check*`) not started. Supersedes the standalone `cmd/check*`
+tests/vet/gofmt clean). Migrate: (a) old-checker references all
+repointed to the analyzers — README, CLAUDE.md, coverage.md + coverage_test.go
+(guard now keys off `analyzers.All`), design-three-contender — so the silent-gap
+guard stays live and Remove is a pure deletion; (b) the composite-action wiring
+built at `372423b` is now SUPERSEDED by Decision 10 — the CI contract is the Go
+`tool` directive (`go tool ddd-vet ./...`), consumer owns CI, and
+`actions/run-ddd-checks/` is to be DELETED. Pending execution: delete the action,
+write tool-directive consumer docs, address the Codex follow-ups (config
+silent-fail, Go-version contract). Remove (step 5, delete `cmd/check*`) not
+started. Supersedes the standalone `cmd/check*`
 directory-walkers. Builds on the spike (`ebca404`) that proved the port.
 **Date:** 2026-06-13
 **Origin:** 2026-06-13 go-ddd session, after the spike validated one ported and
@@ -234,6 +237,61 @@ generally rather than `analysistest` specifically, which is what let the parked
    forces a fresh vet (e.g. `go clean -cache` or a scratch `GOCACHE`) so a
    `.go-ddd.yaml` edit always takes effect, since `go/analysis` doesn't track the
    file as an action input. The principled fix is parked (see Parked).
+   **SUPERSEDED by Decision 10** — the cache problem is an artifact of the
+   vettool-in-Action path and goes away once that path is dropped.
+10. **CI contract = the Go `tool` directive; consumer owns CI (eng review,
+   2026-06-15).** The integration contract is `go get -tool
+   github.com/chrisconley/go-ddd/cmd/ddd-vet@v<ver>` then `go tool ddd-vet ./...`
+   as a step in the consumer's OWN workflow. This is the Layer-1 boring path
+   (staticcheck / NilAway / gosec), version-pinned in the consumer's `go.mod`,
+   runs on any CI + locally + pre-commit. **Delete `actions/run-ddd-checks/`**
+   entirely (reverses the Migrate-phase action wiring at `372423b`); `cmd/ddd-vet`
+   was always the right artifact and stays. CI wiring is the consumer's
+   responsibility. A thin reusable-workflow wrapper may be added later IF a real
+   consumer wants a turnkey on-ramp — not maintained speculatively (reversibility:
+   adding it on demand beats owning an unused GitHub-only surface now). Decisions
+   8 (compile-required) and 9 (cache) lose their Action-specific framing: 8 is now
+   just a documented property of any type-aware run; 9 is moot because the
+   standalone multichecker driver reads `.go-ddd.yaml` fresh at runtime and never
+   touches `go vet`'s analysis-result cache.
+11. **Run mode: standalone `go tool ddd-vet ./...` is the documented default;
+   `go vet -vettool` stays a supported secondary (eng review).** Standalone gives
+   config freshness; `go vet -vettool` (unitchecker) is the more *scalable* path
+   (file-based intermediates, per-package parallelism, fact caching) and the one
+   that lights up gopls/editor diagnostics. Document both; recommend standalone for
+   CI, vettool for large repos that feel the scalability cost and for editor
+   integration. (Outside-voice correction: standalone trades incremental-analysis
+   scalability for config freshness — it is not strictly "free.")
+
+## Follow-ups surfaced by the eng-review outside voice (Codex, 2026-06-15)
+
+Independent of the contract decision; fold fixes/docs in when the contract lands.
+
+- **Config fails silently (fix-worthy, latent silent gap).** `internal/voscan/
+  config.go:54` treats a *missing OR unparseable* `.go-ddd.yaml` as "no excludes."
+  In CI a malformed config silently changes enforcement. Distinguish absent (ok)
+  from present-but-malformed (error) and fail loud on the latter. Ironic gap for a
+  silent-gap toolkit.
+- **Go-version contract is inconsistent.** `go.mod` says `go 1.25.0`, but the
+  `tool` directive is a 1.24 feature. Consumers < 1.24 can't use the directive at
+  all; 1.24 consumers with `GOTOOLCHAIN=local` fail against a 1.25 module. Document
+  the real minimum (≥1.25 to build this module, via a ≥1.24 toolchain) and the
+  `GOTOOLCHAIN` behavior.
+- **`go.mod` pollution.** The directive pulls `golang.org/x/tools` + `yaml.v3` +
+  transitive deps into the consumer's `go.mod`/`go.sum` and interacts via MVS
+  (can bump their own dep versions). Document this as a known cost of the contract.
+- **Monorepo / workspace behavior underspecified.** `FindConfig` walks first-file
+  dir → FS root; no `-config` flag, no repo-root binding, undefined for `go.work` /
+  multi-module / nested services / subdir runs. Specify (and likely add an explicit
+  `-config` override) before a multi-module consumer adopts.
+- **Versioning / tagging.** Need immutable root semver tags; a future `v2` needs
+  `/v2` in both the module path and the tool package path; document the
+  `go tool github.com/chrisconley/go-ddd/cmd/ddd-vet` full-path fallback if the
+  `ddd-vet` short name collides in a consumer.
+- **From Step 0 (deferred, not Codex):** a `golangci-lint` module-plugin wrapper
+  (`cmd/gclplugin`, insurance); SARIF output so findings surface as inline PR
+  annotations instead of raw log text (real DX gap); a pre-built binary on GitHub
+  Releases (build-time optimization, only if `go tool` build cost bites).
 
 ## Risks
 
