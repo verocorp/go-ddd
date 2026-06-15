@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/chrisconley/go-ddd/internal/genexclude"
-	"github.com/chrisconley/go-ddd/internal/voscan"
+	"github.com/verocorp/go-ddd/internal/genexclude"
+	"github.com/verocorp/go-ddd/internal/voscan"
 )
 
 // maybeGenExcludes handles `ddd-vet -gen-excludes [packages...]`, the

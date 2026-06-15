@@ -7,13 +7,13 @@ package analyzers
 import (
 	"golang.org/x/tools/go/analysis"
 
-	"github.com/chrisconley/go-ddd/passes/comparability"
-	"github.com/chrisconley/go-ddd/passes/mustnew"
-	"github.com/chrisconley/go-ddd/passes/primitiveaccessor"
-	"github.com/chrisconley/go-ddd/passes/stringequality"
-	"github.com/chrisconley/go-ddd/passes/stringer"
-	"github.com/chrisconley/go-ddd/passes/voconstructor"
-	"github.com/chrisconley/go-ddd/passes/vofields"
+	"github.com/verocorp/go-ddd/passes/comparability"
+	"github.com/verocorp/go-ddd/passes/mustnew"
+	"github.com/verocorp/go-ddd/passes/primitiveaccessor"
+	"github.com/verocorp/go-ddd/passes/stringequality"
+	"github.com/verocorp/go-ddd/passes/stringer"
+	"github.com/verocorp/go-ddd/passes/voconstructor"
+	"github.com/verocorp/go-ddd/passes/vofields"
 )
 
 // All is every analyzer ddd-vet runs. Each is independently adoptable — a menu,

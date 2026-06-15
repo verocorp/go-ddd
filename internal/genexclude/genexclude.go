@@ -27,7 +27,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/chrisconley/go-ddd/internal/voscan"
+	"github.com/verocorp/go-ddd/internal/voscan"
 )
 
 // Entry is one classified type: the name to exclude and a one-line reason.

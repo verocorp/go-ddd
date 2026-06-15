@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chrisconley/go-ddd/rationale/inconsistent"
-	"github.com/chrisconley/go-ddd/rationale/valueobject"
+	"github.com/verocorp/go-ddd/rationale/inconsistent"
+	"github.com/verocorp/go-ddd/rationale/valueobject"
 )
 
 // --- Non-conformance 1: partial adoption reopens type confusion ------------

@@ -63,7 +63,7 @@ of your Go version, package scoping, and caching.
 Dependabot bump it like any dependency):
 
 ```sh
-go get -tool github.com/chrisconley/go-ddd/cmd/ddd-vet@latest
+go get -tool github.com/verocorp/go-ddd/cmd/ddd-vet@latest
 ```
 
 **2. Run it** as a step in your existing workflow:

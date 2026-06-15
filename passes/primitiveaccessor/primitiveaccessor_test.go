@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/analysistest"
 
-	"github.com/chrisconley/go-ddd/passes/primitiveaccessor"
+	"github.com/verocorp/go-ddd/passes/primitiveaccessor"
 )
 
 func TestPrimitiveAccessor(t *testing.T) {

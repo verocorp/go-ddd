@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chrisconley/go-ddd/rationale/primitive"
-	"github.com/chrisconley/go-ddd/rationale/valueobject"
+	"github.com/verocorp/go-ddd/rationale/primitive"
+	"github.com/verocorp/go-ddd/rationale/valueobject"
 )
 
 // --- Risk class 1: type confusion (Mars Climate Orbiter) -------------------

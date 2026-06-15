@@ -5,7 +5,7 @@ import (
 
 	"github.com/golangci/plugin-module-register/register"
 
-	"github.com/chrisconley/go-ddd/internal/analyzers"
+	"github.com/verocorp/go-ddd/internal/analyzers"
 )
 
 // TestBuildAnalyzers_MatchesRegistry locks the plugin to the single analyzer

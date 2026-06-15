@@ -256,7 +256,7 @@ generally rather than `analysistest` specifically, which is what let the parked
    vettool-in-Action path and goes away once that path is dropped.
 10. **CI contract = the Go `tool` directive; consumer owns CI (eng review,
    2026-06-15).** The integration contract is `go get -tool
-   github.com/chrisconley/go-ddd/cmd/ddd-vet@v<ver>` then `go tool ddd-vet ./...`
+   github.com/verocorp/go-ddd/cmd/ddd-vet@v<ver>` then `go tool ddd-vet ./...`
    as a step in the consumer's OWN workflow. This is the Layer-1 boring path
    (staticcheck / NilAway / gosec), version-pinned in the consumer's `go.mod`,
    runs on any CI + locally + pre-commit. **Delete `actions/run-ddd-checks/`**
@@ -393,7 +393,7 @@ Independent of the contract decision; fold fixes/docs in when the contract lands
   `-config` override) before a multi-module consumer adopts.
 - **Versioning / tagging.** Need immutable root semver tags; a future `v2` needs
   `/v2` in both the module path and the tool package path; document the
-  `go tool github.com/chrisconley/go-ddd/cmd/ddd-vet` full-path fallback if the
+  `go tool github.com/verocorp/go-ddd/cmd/ddd-vet` full-path fallback if the
   `ddd-vet` short name collides in a consumer.
 - **From Step 0 (deferred, not Codex):** ~~a `golangci-lint` module-plugin wrapper~~
   — **BUILT in Decision 15** (`gclplugin/`), after Decision 14 first declined it;

@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/multichecker"
 
-	"github.com/chrisconley/go-ddd/internal/analyzers"
+	"github.com/verocorp/go-ddd/internal/analyzers"
 )
 
 func main() {
