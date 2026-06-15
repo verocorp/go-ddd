@@ -1,0 +1,21 @@
+# Build a golangci-lint binary with the ddd-vet analyzers bundled in. From the
+# directory holding this file:
+#
+#   golangci-lint custom        # requires golangci-lint v2
+#
+# produces a `custom-gcl` binary (set `name:`/`destination:` to place it on your
+# PATH, e.g. ~/go/bin). Point your editor's lint tool at that binary (see the
+# README "Editor integration" section) and it runs ddd-vet on save, natively.
+#
+# Pin `version:` to the golangci-lint release you run, and the plugin `version:`
+# to a published go-ddd tag — Renovate/Dependabot then bump them like any dep.
+version: v2.12.2
+name: custom-gcl
+destination: /Users/me/go/bin
+plugins:
+  - module: github.com/chrisconley/go-ddd
+    import: github.com/chrisconley/go-ddd/gclplugin
+    version: v0.1.0
+    # Unpublished / dogfooding against a local go-ddd checkout? Drop `version:`
+    # above and use a local path instead:
+    #   path: /absolute/path/to/go-ddd
