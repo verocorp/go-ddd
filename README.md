@@ -101,25 +101,38 @@ large modules (per-package, file-based intermediates, fact caching).
 ### Editor integration
 
 gopls only runs the analyzers compiled into it, so it cannot surface a custom
-`go/analysis` analyzer — there is no setting that points it at `ddd-vet`. The
-editor path is a VS Code / Cursor **task** whose output a `problemMatcher` turns
-into inline squiggles + Problems-panel entries. Copy
-[`examples/editor/tasks.json`](examples/editor/tasks.json) to your repo's
-`.vscode/tasks.json`:
+`go/analysis` analyzer — there is no setting that points it at `ddd-vet`. Two
+ways to get the diagnostics into the editor, both **on save** (gopls is the only
+on-keystroke path, and it's unavailable to us):
 
-- **On demand:** Command Palette → *Tasks: Run Task* → `ddd-vet`.
-- **On every save:** add the
-  [Trigger Task on Save](https://marketplace.visualstudio.com/items?itemName=Gruntfuggly.triggertaskonsave)
-  extension and map the task to `**/*.go`. Findings then refresh on each save.
+**Native, via golangci-lint (recommended).** `ddd-vet` ships as a golangci-lint
+[module plugin](https://golangci-lint.run/docs/plugins/module-plugins/)
+([`gclplugin/`](gclplugin/)), so the editor's standard `go.lintOnSave` pipeline
+renders the findings as squiggles — no extra extension. One-time setup:
 
-This is deliberately *not* a golangci-lint plugin. The golangci-lint editor
-integration also runs only on save (gopls is the sole on-keystroke path, and it
-can't load custom analyzers), so the plugin would buy the same trigger at the
-cost of every developer building and PATH-shadowing a custom `golangci-lint`
-binary. The task gives the same on-save diagnostics with none of that. (If a
-consumer that already standardizes on golangci-lint wants `ddd-vet` folded into
-their single lint pass, a module plugin is the right tool — build it then, for
-that consumer. See `docs/design-ddd-vet-migration.md` Decision 14.)
+1. Copy [`examples/golangci/.custom-gcl.yml`](examples/golangci/.custom-gcl.yml)
+   and build the bundled binary: `golangci-lint custom` (needs golangci-lint v2).
+   Put the resulting `custom-gcl` on your PATH (e.g. `~/go/bin`).
+2. Enable the linter: copy
+   [`examples/golangci/.golangci.yml`](examples/golangci/.golangci.yml) (adds the
+   `dddvet` linter; `.go-ddd.yaml` stays the exclude source).
+3. Point the editor at the custom binary — in `.vscode/settings.json`:
+   ```json
+   "go.lintTool": "golangci-lint-v2",
+   "go.lintOnSave": "package",
+   "go.alternateTools": { "golangci-lint-v2": "/abs/path/to/custom-gcl" }
+   ```
+   Same `custom-gcl` runs in CI (`custom-gcl run ./...`) and folds `ddd-vet` into
+   one lint pass alongside your other linters.
+
+**No-build fallback, via a task.** If you don't use golangci-lint, copy
+[`examples/editor/tasks.json`](examples/editor/tasks.json) (runs
+`go tool ddd-vet`, output parsed by a `problemMatcher`): *Tasks: Run Task →
+ddd-vet* on demand, or add
+[Trigger Task on Save](https://marketplace.visualstudio.com/items?itemName=Gruntfuggly.triggertaskonsave)
+for on-save. Same on-save timing, no custom binary — but a third-party extension
+instead of the native pipeline. (Background on the trade: `docs/design-ddd-vet-migration.md`
+Decisions 14–15.)
 
 ## The conventions, briefly
 

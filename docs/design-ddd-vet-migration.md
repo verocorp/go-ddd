@@ -15,9 +15,10 @@ now-unused `testify`.** Add → Migrate → Remove complete. **First-consumer
 dogfood (quanta, 2026-06-15) done:** `stringequality` tightened to
 comparison-context (Decision 12) and an end-to-end test added
 (`cmd/ddd-vet/e2e_test.go`, Decision 13); quanta's tree left unchanged. **Editor
-integration decided (Decision 14):** a run-on-save task
-(`examples/editor/tasks.json`) is the official path; the golangci-lint plugin is
-declined until a golangci-lint-shop consumer needs it. Open: the
+integration (Decisions 14→15):** the golangci-lint module plugin (`gclplugin/`)
+is the recommended native-on-save path (verified building a `custom-gcl` that
+flags quanta's `Quantized`); a run-on-save task (`examples/editor/tasks.json`) is
+the no-build fallback. Open: the
 remaining Codex follow-ups (Go-version contract note, monorepo `-config`,
 versioning) and the Step-0 deferrals (gclplugin, SARIF, released binary). Supersedes the standalone `cmd/check*`
 directory-walkers. Builds on the spike (`ebca404`) that proved the port.
@@ -343,6 +344,31 @@ generally rather than `analysistest` specifically, which is what let the parked
     under either path (the analyzers read it from the package dir regardless of
     driver), so no second config surface is introduced. Also fixed here: the
     incorrect "vettool lights up gopls" claim in Decision 11 and the README.
+15. **Reversal of Decision 14: build the golangci-lint plugin; native on-save is
+    the recommended editor path (2026-06-15).** Decision 14 declined the plugin on
+    the argument that the task route gives "the same on-save trigger." True about
+    the *trigger*, but it undersold the DX gap, which surfaced the moment the task
+    route was tried: a VS Code task has **no native on-save**, so it needs a
+    third-party extension (*Trigger Task on Save*) to fire on save — whereas the
+    golangci-lint plugin rides the Go extension's **native `go.lintOnSave`
+    pipeline**, no extra extension. golangci-lint is, in fact, the only way to get
+    `ddd-vet` into that native pipeline (gopls can't load custom analyzers). So the
+    plugin's real value isn't just "unification" as Decision 14 framed it — it's
+    native on-save squiggles. Decision: **build it.** Shipped
+    [`gclplugin/`](../gclplugin/) — a `register.Plugin("dddvet", …)` shim whose
+    `BuildAnalyzers` returns `internal/analyzers.All` (so plugin and standalone
+    binary never drift) with `LoadModeTypesInfo`. Adds one dep
+    (`github.com/golangci/plugin-module-register`); it is pruned out of
+    tool-directive consumers since `cmd/ddd-vet` doesn't import it. Verified
+    end-to-end: `golangci-lint custom` (v2) builds a `custom-gcl` that flags
+    quanta's `Quantized` and nothing spurious. `.go-ddd.yaml` stays the single
+    config source under golangci-lint too (analyzers read it from the package dir
+    regardless of driver). The task route (Decision 14) stays documented as the
+    no-build fallback for non-golangci-lint repos. Templates in
+    [`examples/golangci/`](../examples/golangci/); README rewritten. **Caveat
+    carried forward:** golangci-lint caches results and doesn't track `.go-ddd.yaml`
+    as an input (the parked cache concern), and every dev must build + maintain the
+    `custom-gcl` binary — the real adoption cost of this path.
 
 ## Follow-ups surfaced by the eng-review outside voice (Codex, 2026-06-15)
 
@@ -369,11 +395,12 @@ Independent of the contract decision; fold fixes/docs in when the contract lands
   `/v2` in both the module path and the tool package path; document the
   `go tool github.com/chrisconley/go-ddd/cmd/ddd-vet` full-path fallback if the
   `ddd-vet` short name collides in a consumer.
-- **From Step 0 (deferred, not Codex):** ~~a `golangci-lint` module-plugin wrapper
-  (`cmd/gclplugin`, insurance)~~ — **declined in Decision 14** (build it on demand
-  for a real golangci-lint-shop consumer, not speculatively); SARIF output so
-  findings surface as inline PR annotations instead of raw log text (real DX gap);
-  a pre-built binary on GitHub Releases (build-time optimization, only if `go tool`
+- **From Step 0 (deferred, not Codex):** ~~a `golangci-lint` module-plugin wrapper~~
+  — **BUILT in Decision 15** (`gclplugin/`), after Decision 14 first declined it;
+  it is the native-on-save editor path. SARIF output so findings surface as inline
+  PR annotations instead of raw log text (real DX gap) — note the golangci-lint
+  path now gives SARIF for free via `custom-gcl run --output.sarif.path`; a
+  pre-built binary on GitHub Releases (build-time optimization, only if `go tool`
   build cost bites).
 
 ## Risks
