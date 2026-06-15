@@ -9,8 +9,8 @@ import (
 	"golang.org/x/tools/go/packages"
 	"gopkg.in/yaml.v3"
 
-	"github.com/chrisconley/go-ddd/internal/genexclude"
-	"github.com/chrisconley/go-ddd/internal/voscan"
+	"github.com/verocorp/go-ddd/internal/genexclude"
+	"github.com/verocorp/go-ddd/internal/voscan"
 )
 
 func loadDom(t *testing.T) []*packages.Package {

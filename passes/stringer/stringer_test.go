@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/analysistest"
 
-	"github.com/chrisconley/go-ddd/passes/stringer"
+	"github.com/verocorp/go-ddd/passes/stringer"
 )
 
 func TestStringer(t *testing.T) {

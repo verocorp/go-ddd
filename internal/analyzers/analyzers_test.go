@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chrisconley/go-ddd/internal/analyzers"
+	"github.com/verocorp/go-ddd/internal/analyzers"
 )
 
 // repoRoot walks up from the test's working directory to the module root.

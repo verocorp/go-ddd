@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chrisconley/go-ddd/internal/analyzers"
+	"github.com/verocorp/go-ddd/internal/analyzers"
 )
 
 // TestCoverageMatrix_NoSilentGaps keeps coverage.md honest: every analyzer

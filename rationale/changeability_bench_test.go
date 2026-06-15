@@ -15,8 +15,8 @@ package changeability_test
 import (
 	"testing"
 
-	"github.com/chrisconley/go-ddd/rationale/primitive"
-	"github.com/chrisconley/go-ddd/rationale/valueobject"
+	"github.com/verocorp/go-ddd/rationale/primitive"
+	"github.com/verocorp/go-ddd/rationale/valueobject"
 )
 
 // sink defeats dead-code elimination so the work actually runs.

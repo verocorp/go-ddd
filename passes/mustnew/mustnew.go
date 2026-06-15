@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 
-	"github.com/chrisconley/go-ddd/internal/voscan"
+	"github.com/verocorp/go-ddd/internal/voscan"
 )
 
 var exclude string

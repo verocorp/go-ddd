@@ -1,4 +1,4 @@
-module github.com/chrisconley/go-ddd
+module github.com/verocorp/go-ddd
 
 go 1.25.0
 
