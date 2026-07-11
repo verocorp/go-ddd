@@ -1,0 +1,13 @@
+# Human-ratified exclude list for the value-object heuristic (see
+# internal/voscan/config.go). Passenger and BoardingManifest match the
+# NewX(...) (X, error) constructor shape the analyzers use as a
+# value-object signal, but they are not value objects:
+#
+#   - Passenger is an entity: identity is by PassengerID, not by
+#     attributes (see Passenger.Equal in passenger.go).
+#   - BoardingManifest is an aggregate: it owns a Passengers collection and
+#     enforces a cross-object invariant (no shared seats) as the
+#     collection's single entry point (see boarding_manifest.go).
+exclude:
+  - Passenger
+  - BoardingManifest
