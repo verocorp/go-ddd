@@ -28,6 +28,11 @@ holds.
 > The skill uses `Client` because the vero prior art does; read it as "the
 > client-facing contract," and define the term this way wherever you introduce it.
 
+**The callers, in a fuller treatment (footnote).** The *callers* on the far side
+of this contract are, in a fuller treatment, other **bounded contexts** — a
+component's public interface is the seam between contexts. Named here, not
+introduced; bounded contexts are a later increment.
+
 ### Is this a public interface?
 
 **Test:** *Am I defining the deliberately-exposed contract of a component — the
@@ -85,7 +90,7 @@ type Client interface {
     GetOrder(ctx, GetOrderRequest)     (GetOrderResponse, error)
 }
 
-type PlaceOrderRequest  struct { CustomerID string; Items []ItemRequest } // DTO: primitive-leaved
+type PlaceOrderRequest  struct { CustomerID string; Items []ItemInput }   // DTO: primitive-leaved
 type PlaceOrderResponse struct { OrderID string; Total string }           // DTO: never a domain object
 ```
 
@@ -197,9 +202,11 @@ correct, the same call in a handler is the leak.
 ## Tests you must write
 
 - **The `Client` speaks DTOs only:** a `Client` method returns a DTO, never a
-  domain object. Enforced at compile time (the impl would not build returning an
-  aggregate where the interface says DTO) and asserted by a test reading the
-  response's fields.
+  domain object. The compiler enforces that the impl matches the interface (it
+  can't return an aggregate where the interface declares a DTO) — but that the
+  *declared* return type is a DTO and not a domain object is the review call (see
+  "How the machine sees it"); assert it with a test that reads the response's DTO
+  fields.
 - **The composition root wires end-to-end:** build the `Client` through the root,
   call a method, assert the result — the object graph is connected and a real use
   case runs through it.
