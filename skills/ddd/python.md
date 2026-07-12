@@ -281,6 +281,22 @@ class InMemoryOrderRepo:                   # satisfies the Protocol structurally
   the backing store is not this skill's decision. v1 best-effort — see the
   maturity note at the top.)
 
+## The composition root
+
+**Not covered in this version** (see `composition-root.md`). The concepts port to
+Python — a `Client` as a `typing.Protocol` (structural, like Go's implicit
+interface satisfaction; **not** `abc.ABC`, which is nominal, and **not** a
+pydantic model, which is validated data), DTOs as frozen dataclasses, and a
+hand-wired composition root in a `main` / entry module that constructs the
+concrete service + repository and injects the `Client` into the handler. Wire has
+no Python analog, so the wiring stays hand-written; enforce the "handler depends
+on the `Protocol`" boundary with **mypy in strict mode in CI** (there is no
+`internal/` in Python). This is a genuine structural analog but **net-new and
+unvalidated** in vero's Python code — it ships as a documented gap, not a settled
+convention, until a consumer proves it. Build the domain pieces the task touches
+with the sections above and wire them the simplest way that works, rather than
+inventing a convention here.
+
 ## The Spec pattern
 
 Specs are frozen dataclasses with **primitive leaves** that carry construction
