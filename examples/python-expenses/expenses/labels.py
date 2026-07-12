@@ -9,7 +9,9 @@ class Labels:
     _values: tuple[tuple[str, str], ...] = ()  # immutable, hashable storage
 
     def __post_init__(self) -> None:  # canonicalize on EVERY construction path
-        object.__setattr__(self, "_values", tuple(sorted(self._values)))
+        # dedupe keys (last wins) AND sort — review-hardened so the raw
+        # constructor can't hold a non-canonical value with duplicate keys.
+        object.__setattr__(self, "_values", tuple(sorted(dict(self._values).items())))
 
     @classmethod
     def new(cls, values: Mapping[str, str] | None = None) -> "Labels":

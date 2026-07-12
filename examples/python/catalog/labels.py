@@ -19,9 +19,11 @@ class Labels:
     _values: tuple[tuple[str, str], ...] = field(default=())
 
     def __post_init__(self) -> None:
-        # Canonicalize to sorted order on every construction path, so equality
-        # and hashing are content-based regardless of input order.
-        object.__setattr__(self, "_values", tuple(sorted(self._values)))
+        # Canonicalize on every construction path — dedupe keys (last wins) AND
+        # sort — so equality and hashing are content-based regardless of input
+        # order, even when the raw constructor is called directly with
+        # duplicate keys.
+        object.__setattr__(self, "_values", tuple(sorted(dict(self._values).items())))
 
     @classmethod
     def new(cls, values: Mapping[str, str] | None = None) -> "Labels":
@@ -48,3 +50,7 @@ class Labels:
 
     def __len__(self) -> int:
         return len(self._values)
+
+    def __str__(self) -> str:
+        # Display only, never an equality path. _values is already sorted.
+        return ",".join(f"{k}={v}" for k, v in self._values)

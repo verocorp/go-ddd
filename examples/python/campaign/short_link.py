@@ -20,10 +20,12 @@ class ShortLinkSpec:
 
 class ShortLink:
     """The entity a Campaign owns: a slug mapped to a target URL, with a
-    lifecycle (active -> deactivated). Its identity is its Slug — two short
-    links with the same slug in the same campaign would be the same link, and
-    the rule forbidding duplicate slugs within a campaign is exactly the
-    identity rule an entity earns.
+    lifecycle (active -> deactivated). It earns identity from that lifecycle —
+    the system tracks *this specific link* as it changes state — and its Slug
+    serves as its natural-key ID (equality is by slug). The Campaign separately
+    enforces that no two of its short links share a slug; that uniqueness is an
+    aggregate invariant, not the source of the entity's identity (see
+    entities.md — a uniqueness constraint is not identity).
 
     Fields are value objects, never raw primitives; underscore-private with
     read-only ``@property`` accessors and no setters. Equality is identity (by
@@ -67,6 +69,14 @@ class ShortLink:
         if not self._active:
             raise ValueError(f"short link {self._slug} is already deactivated")
         self._active = False
+
+    def _clone(self) -> "ShortLink":
+        """An independent copy the aggregate hands out from its accessor.
+        ShortLink is mutable, so returning the real object would let a caller
+        deactivate it directly and bypass the root; a caller may only mutate a
+        copy. slug and target_url are immutable value objects, so a shallow copy
+        is genuinely independent."""
+        return ShortLink(self._slug, self._target_url, self._active)
 
     def __eq__(self, other: object) -> bool:
         # Identity, not attributes: two short links are the same iff same slug.

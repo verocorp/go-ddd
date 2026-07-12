@@ -67,6 +67,15 @@ def test_links_accessor_is_a_defensive_copy() -> None:
     assert len(c.links) == 2
 
 
+def test_links_accessor_does_not_leak_mutable_children() -> None:
+    # The container is copied AND so are the mutable child entities: calling a
+    # mutating method on a returned link must not reach the aggregate's own
+    # state. Deactivation only happens through the root's guarded transition.
+    c = Campaign.from_spec(_spec("spring-sale"))
+    c.links[0].deactivate()  # try to mutate a returned child directly
+    assert c.links[0].active is True  # the aggregate's own state is untouched
+
+
 def test_aggregates_are_not_value_compared() -> None:
     # Comparing aggregates by value is a bug; __eq__ = None makes it raise.
     a = Campaign.from_spec(_spec("spring-sale"))

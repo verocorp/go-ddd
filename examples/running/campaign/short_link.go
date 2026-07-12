@@ -3,13 +3,12 @@ package campaign
 import "fmt"
 
 // ShortLink is the entity a Campaign owns: a slug mapped to a target URL,
-// with a lifecycle (active -> deactivated). Its identity is its Slug: two
-// short links with the same slug in the same campaign would be the same
-// link, and the business rule that forbids duplicate slugs within a
-// campaign is exactly the identity rule an entity earns (see
-// entities.md: "a value object that wraps an ID has no identity of its
-// own" — here Slug plays that role for ShortLink, the same way CustomerID
-// identifies a Customer).
+// with a lifecycle (active -> deactivated). It earns identity from that
+// lifecycle — the system tracks this specific link as it changes state — and
+// its Slug serves as its natural-key ID (equality is by slug). The Campaign
+// separately enforces that no two of its short links share a slug; that
+// uniqueness is an aggregate invariant, not the source of the entity's
+// identity (see entities.md: a uniqueness constraint is not identity).
 type ShortLink struct {
 	slug      Slug
 	targetURL TargetURL

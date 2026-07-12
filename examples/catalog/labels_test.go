@@ -38,6 +38,14 @@ func TestLabels_Equality(t *testing.T) {
 	}
 }
 
+func TestLabels_String(t *testing.T) {
+	// Display form is deterministic (sorted) — every VO implements Stringer.
+	l := NewLabels(map[string]string{"size": "M", "color": "black"})
+	if got := l.String(); got != "color=black,size=M" {
+		t.Errorf("String() = %q, want %q", got, "color=black,size=M")
+	}
+}
+
 func TestRequireLabels_RejectsEmpty(t *testing.T) {
 	if _, err := RequireLabels(nil); err == nil {
 		t.Errorf("RequireLabels(nil) should be rejected")
