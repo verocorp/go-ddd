@@ -201,6 +201,40 @@ repo speaks value objects and aggregates, not raw rows; a query object carries
 domain-typed selection criteria and is **not** a Spec (specs have primitive
 leaves and build objects; query objects select stored ones).
 
+## 17. What's a public interface / `Client`, and why not just call the service directly?
+
+A **public interface** is the contract a component exposes — a `Client`
+interface plus its DTOs, in a public package, and nothing else. It is a
+**decoupling boundary**: callers depend on the contract, not on how the internals
+are built, so you can refactor the service, rename or regroup methods, or compose
+several internal pieces, and nothing outside breaks as long as the signatures and
+DTOs hold. (Read `Client` as "the client-facing contract of *this* component,"
+not an outbound adapter to a remote service.)
+
+**Decide:** in the common single-service case you don't write forwarding code —
+a struct that **embeds** the application service satisfies the `Client` by method
+promotion, for free. Write an explicit method only when you **reshape** the
+contract (rename, subset, nest, or union several components). The `Client` speaks
+DTOs at the boundary, never domain objects — a domain type in a `Client` signature
+is a leak (the same no-leak rule as a service's *Respond* step, made structural).
+
+## 18. Where does the app get wired together — who constructs the services and repos?
+
+The **composition root**: the single place (typically `main`) that constructs the
+concrete services and repositories, composes them behind the public `Client`, and
+constructs the handler, injecting the `Client` into it. It is the **only** place
+that *chooses* which concrete implementation the app wires in — swapping a
+database repo for an in-memory one is a one-line change there — and it
+**returns/injects interfaces, never raw domain objects**.
+
+**Rule:** the handler *receives* the `Client` through its constructor (it never
+reaches into the root to "obtain" it — that's service-locator), and depends on
+the interface, never a concrete. "Only the composition root imports the
+concretes" is a convention in this version; Go's `internal/` makes it
+compiler-enforced, a later addition. (This is the wiring layer only — config,
+connection pools, graceful shutdown, health checks, and workers are a separate
+later increment.)
+
 ---
 
 ## Adding an entry

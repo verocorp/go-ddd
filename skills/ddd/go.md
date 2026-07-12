@@ -334,6 +334,108 @@ func (r *InMemoryOrderRepo) Load(ctx context.Context, id OrderID) (Order, error)
 - **Query fields are value objects** (`CustomerID`, `Period`), so the boundary
   can't be handed a raw unvalidated string.
 
+## The composition root
+
+The public interface + the wiring site (`composition-root.md`). The `Client`
+interface and its DTOs live in a public package; a struct in the impl **embeds
+the application service to satisfy it**; a hand-wired `main` chooses the concrete
+implementations and injects the `Client` into the handler.
+
+**The public package — interface + DTOs only, no behavior:**
+
+```go
+// orders/client.go — the ENTIRE public surface of the component.
+package orders
+
+type Client interface {
+	PlaceOrder(ctx context.Context, req PlaceOrderRequest) (PlaceOrderResponse, error)
+	GetOrder(ctx context.Context, req GetOrderRequest) (GetOrderResponse, error)
+}
+
+type PlaceOrderRequest struct { // DTO — primitive leaves, JSON-tagged
+	CustomerID string      `json:"customer_id"`
+	Items      []ItemInput `json:"items"`
+}
+type PlaceOrderResponse struct { // DTO — never a domain object
+	OrderID string `json:"order_id"`
+	Total   string `json:"total"`
+}
+```
+
+**Satisfy the interface by embedding the service (zero forwarding code):**
+
+```go
+// ordersimpl/client.go — in the implementation package.
+package ordersimpl
+
+import "example.com/app/orders"
+
+// Embedding promotes OrderService's methods, so this struct satisfies
+// orders.Client with no forwarding methods of its own.
+type client struct {
+	*OrderService
+}
+
+// Compile-time proof the contract is met — fails to build if a signature drifts.
+var _ orders.Client = (*client)(nil)
+
+func NewClient(svc *OrderService) orders.Client {
+	return &client{OrderService: svc}
+}
+```
+
+The service's methods must already have the `Client`'s signatures (DTO in, DTO
+out) for promotion to satisfy the interface — which they do, because an
+application service's *Convert* and *Respond* steps already speak DTOs
+(`go.md#application-services`). Write an **explicit method only to reshape** the
+contract:
+
+```go
+// Reshape example: expose the service's CreateOrder under the public name
+// PlaceOrder. Only then do you write a forwarding method — never for a 1:1 name.
+func (c *client) PlaceOrder(ctx context.Context, req orders.PlaceOrderRequest) (orders.PlaceOrderResponse, error) {
+	return c.OrderService.CreateOrder(ctx, req)
+}
+```
+
+**The composition root — one hand-wired `main` that chooses and wires:**
+
+```go
+// main.go — the only place that imports the concrete impl package.
+package main
+
+func main() {
+	db := openDB()                              // the impl choice lives here …
+	repo := ordersimpl.NewPostgresRepo(db)      // … and ONLY here (swap → one line)
+	svc := ordersimpl.NewOrderService(repo)     // inject the repo into the service
+	client := ordersimpl.NewClient(svc)         // compose behind the public Client
+	handler := api.NewHandler(client)           // construct the handler, INJECT the Client
+
+	http.ListenAndServe(":8080", handler)       // a minimal runnable main
+}
+```
+
+- **`NewClient` returns `orders.Client`** — an interface, never `*client` or a
+  domain type. The caller (here, `NewHandler`) sees only the contract.
+- **The handler depends on the interface**, injected through its constructor:
+
+```go
+// api/handler.go — depends on orders.Client, constructs nothing.
+type Handler struct {
+	client orders.Client // interface, not *ordersimpl.OrderService
+}
+
+func NewHandler(client orders.Client) *Handler { return &Handler{client: client} }
+```
+
+- **Only `main` imports `ordersimpl`.** Nothing else selects the concrete. That
+  boundary is a *convention* here; Go's `internal/` makes it compiler-enforced —
+  a later addition (`composition-root.md`).
+- **Wire (`github.com/google/wire`)** is one realization of this hand-wiring:
+  codegen that builds the same graph from a provider set, for when the `main`
+  grows unwieldy. Named once; the hand-wired form above is what this skill
+  teaches — the concepts are identical, Wire only generates the constructor calls.
+
 ## The Spec pattern
 
 A spec is a **primitive-leaved struct that carries construction data across

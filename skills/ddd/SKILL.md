@@ -1,7 +1,7 @@
 ---
 name: ddd
-description: Domain-driven design entry point. Load whenever creating or modifying domain types OR the code around them — adding a field to a struct/class, creating a new type, modeling a new concept, writing a constructor, adding validation, comparing domain objects in tests, deciding between a value object/entity/aggregate, AND whenever writing a handler/endpoint, a use-case or application/domain service, or persistence/repository code (where to put business logic, how to load or save an aggregate, keeping domain math out of controllers). Routes the task to the right concept and construction guide.
-skill-version: 2
+description: Domain-driven design entry point. Load whenever creating or modifying domain types OR the code around them — adding a field to a struct/class, creating a new type, modeling a new concept, writing a constructor, adding validation, comparing domain objects in tests, deciding between a value object/entity/aggregate, AND whenever writing a handler/endpoint, a use-case or application/domain service, or persistence/repository code (where to put business logic, how to load or save an aggregate, keeping domain math out of controllers), AND whenever wiring an application together — writing an entry point / `main` / composition root, or exposing a component behind a public interface (a `Client` + DTOs). Routes the task to the right concept and construction guide.
+skill-version: 3
 source: https://github.com/verocorp/go-ddd (skills/ddd/)
 ---
 
@@ -13,18 +13,22 @@ below points you to** — do not read all the files up front.
 
 Languages covered: **Go** (`go.md`) and **Python** (`python.md`).
 Concepts covered: **value objects, entities, aggregates** (the domain building
-blocks) and **application services, repositories** (the seams around them), plus
-a **domain-service stub** (`domain-services.md` — the rare no-single-owner case,
-deliberately shallow). Not yet covered: bounded contexts, the transport/HTTP
-layer beyond the one handler rule below, domain events. If your task needs one
-of those, model the pieces it touches with this skill and note the gap rather
-than inventing a convention.
+blocks), **application services, repositories** (the seams around them), the
+**public interface + composition root** (how the app is wired together —
+`composition-root.md`), plus a **domain-service stub** (`domain-services.md` —
+the rare no-single-owner case, deliberately shallow). Not yet covered: bounded
+contexts, the transport/HTTP layer beyond the one handler rule below, domain
+events, the run/lifecycle layer beyond wiring (config, pools, shutdown, health,
+workers). If your task needs one of those, model the pieces it touches with this
+skill and note the gap rather than inventing a convention.
 
 **The one handler rule (transport layer, until it gets its own guide):** a
 handler/endpoint parses and authenticates the request, then calls an application
-service. It does **no domain math and touches no repository** — if you're
-writing a `for`-loop over domain objects or a DB call in a handler, that logic
-belongs in the application service or the domain (see the placement guide below).
+service — ideally **through the component's public `Client` interface**
+(`composition-root.md`), never a concrete service or repository it constructed
+itself. It does **no domain math and touches no repository** — if you're writing
+a `for`-loop over domain objects or a DB call in a handler, that logic belongs in
+the application service or the domain (see the placement guide below).
 
 ## The taxonomy in one pass
 
@@ -85,6 +89,8 @@ Route on the task:
 | Writing a use-case / orchestration / a service method | Read `application-services.md` — the four-step shape (convert → delegate → persist → respond), no business logic |
 | Writing a handler / endpoint / controller | Read `application-services.md#is-this-what-im-building` — keep domain math and repositories out; call an application service |
 | Loading or saving an aggregate, or writing a repository | Read `repositories.md` — whole aggregate in, reconstructed out, no business logic; query object ≠ spec |
+| Exposing a component/service behind a public interface (a `Client` + DTOs) | Read `composition-root.md#the-public-interface` — a decoupling boundary, satisfied by embedding the service; speaks DTOs, never domain objects |
+| Wiring the app / writing an entry point / `main` / a composition root | Read `composition-root.md#the-composition-root` — the one place that chooses the concrete impls, composes them behind the `Client`, and injects it into the handler |
 | Business logic that "wants" to live in a service or handler | Read `application-services.md#domain-logic-leakage-checks` — move it onto the owning domain type |
 | Domain logic that fits no single object | Read `domain-services.md` — the rare case; confirm no missing type owns it first |
 | Unsure after the tests | Read `value-objects.md` first — it defines the default; identity is the exception |
