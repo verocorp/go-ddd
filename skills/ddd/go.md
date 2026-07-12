@@ -341,11 +341,16 @@ interface and its DTOs live in a public package; a struct in the impl **embeds
 the application service to satisfy it**; a hand-wired `main` chooses the concrete
 implementations and injects the `Client` into the handler.
 
-**The public package — interface + DTOs only, no behavior:**
+**The public package — interface + DTOs only, no implementation** (an interface
+is a behavior contract; the behavior lives behind it, in the service that
+satisfies it):
 
 ```go
-// orders/client.go — the ENTIRE public surface of the component.
+// orders/client.go — the public surface of the component (interface + DTOs;
+// excerpt — GetOrder's request/response DTOs elided).
 package orders
+
+import "context"
 
 type Client interface {
 	PlaceOrder(ctx context.Context, req PlaceOrderRequest) (PlaceOrderResponse, error)
@@ -355,6 +360,10 @@ type Client interface {
 type PlaceOrderRequest struct { // DTO — primitive leaves, JSON-tagged
 	CustomerID string      `json:"customer_id"`
 	Items      []ItemInput `json:"items"`
+}
+type ItemInput struct {
+	SKU      string `json:"sku"`
+	Quantity int    `json:"quantity"`
 }
 type PlaceOrderResponse struct { // DTO — never a domain object
 	OrderID string `json:"order_id"`
@@ -384,11 +393,15 @@ func NewClient(svc *OrderService) orders.Client {
 }
 ```
 
-The service's methods must already have the `Client`'s signatures (DTO in, DTO
-out) for promotion to satisfy the interface — which they do, because an
-application service's *Convert* and *Respond* steps already speak DTOs
-(`go.md#application-services`). Write an **explicit method only to reshape** the
-contract:
+For promotion to satisfy the interface, the embedded service's methods must
+match the `Client`'s **method names *and* signatures** — and the parameter and
+return types must be the **public package's DTO types**
+(`orders.PlaceOrderRequest`), not a same-shaped struct declared in the impl (in
+Go a same-shaped copy is still a *different* type and won't satisfy the
+interface). The DTO half comes for free — an application service's
+*Convert*/*Respond* steps already speak these DTOs
+(`go.md#application-services`) — so the **names must line up**, or you write an
+**explicit method to reshape** the contract:
 
 ```go
 // Reshape example: expose the service's CreateOrder under the public name

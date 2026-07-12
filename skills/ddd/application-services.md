@@ -22,10 +22,11 @@ myself?* Yes → application service.
 - A **transport handler** (HTTP/gRPC/CLI entry point) — parses the request,
   authenticates, calls the application service, writes the response. It holds no
   domain logic and no persistence either. One-line rule: **a handler
-  parses/authenticates and calls the application service; it never does domain
-  math or touches a repository.** (Full transport-layer guidance is a later
-  version; this one rule ships now because the handler is where the leak
-  starts.)
+  parses/authenticates and calls the application service — through the
+  component's public `Client` interface where one exists (`composition-root.md`),
+  never a concrete it built itself; it never does domain math or touches a
+  repository.** (Full transport-layer guidance is a later version; this one rule
+  ships now because the handler is where the leak starts.)
 - A **DTO / request struct** — data crossing the boundary. It has no behavior.
 
 ## Rules

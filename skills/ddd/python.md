@@ -283,19 +283,15 @@ class InMemoryOrderRepo:                   # satisfies the Protocol structurally
 
 ## The composition root
 
-**Not covered in this version** (see `composition-root.md`). The concepts port to
-Python — a `Client` as a `typing.Protocol` (structural, like Go's implicit
-interface satisfaction; **not** `abc.ABC`, which is nominal, and **not** a
-pydantic model, which is validated data), DTOs as frozen dataclasses, and a
-hand-wired composition root in a `main` / entry module that constructs the
-concrete service + repository and injects the `Client` into the handler. Wire has
-no Python analog, so the wiring stays hand-written; enforce the "handler depends
-on the `Protocol`" boundary with **mypy in strict mode in CI** (there is no
-`internal/` in Python). This is a genuine structural analog but **net-new and
-unvalidated** in vero's Python code — it ships as a documented gap, not a settled
-convention, until a consumer proves it. Build the domain pieces the task touches
-with the sections above and wire them the simplest way that works, rather than
-inventing a convention here.
+**Not covered in this version** (see `composition-root.md` for the concepts).
+Unlike the Go mechanics above — which are backed by a verified worked example
+(`examples/running/`) — there is **no verified Python implementation of this
+wiring layer yet**, so this skill deliberately does not encode a Python how-to
+for it: a rendering is plausible, but this toolkit does not ship a convention it
+has not verified against real, running code. Until a verified Python example
+backs it, build the domain pieces the task touches with the sections above and
+wire them the simplest way that works, flagging the wiring layer as an open gap
+rather than inventing a convention here.
 
 ## The Spec pattern
 

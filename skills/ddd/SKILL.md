@@ -24,9 +24,9 @@ skill and note the gap rather than inventing a convention.
 
 **The one handler rule (transport layer, until it gets its own guide):** a
 handler/endpoint parses and authenticates the request, then calls an application
-service — ideally **through the component's public `Client` interface**
-(`composition-root.md`), never a concrete service or repository it constructed
-itself. It does **no domain math and touches no repository** — if you're writing
+service **through the component's public `Client` interface**
+(`composition-root.md`) where one exists — depending on that contract, never a
+concrete service or repository it constructed itself. It does **no domain math and touches no repository** — if you're writing
 a `for`-loop over domain objects or a DB call in a handler, that logic belongs in
 the application service or the domain (see the placement guide below).
 
@@ -87,7 +87,7 @@ Route on the task:
 | Needing mutation / a state transition | Read `entities.md#decisions-you-must-make` (fact vs lifecycle) before writing a setter |
 | Comparing two domain objects in a test | Read `value-objects.md#tests-you-must-write` — never compare via `.String()`/`str()` |
 | Writing a use-case / orchestration / a service method | Read `application-services.md` — the four-step shape (convert → delegate → persist → respond), no business logic |
-| Writing a handler / endpoint / controller | Read `application-services.md#is-this-what-im-building` — keep domain math and repositories out; call an application service |
+| Writing a handler / endpoint / controller | Read `application-services.md#is-this-what-im-building` (keep domain math and repositories out) **and `composition-root.md#the-public-interface`** — depend on the component's public `Client`, injected; never a concrete service or repository |
 | Loading or saving an aggregate, or writing a repository | Read `repositories.md` — whole aggregate in, reconstructed out, no business logic; query object ≠ spec |
 | Exposing a component/service behind a public interface (a `Client` + DTOs) | Read `composition-root.md#the-public-interface` — a decoupling boundary, satisfied by embedding the service; speaks DTOs, never domain objects |
 | Wiring the app / writing an entry point / `main` / a composition root | Read `composition-root.md#the-composition-root` — the one place that chooses the concrete impls, composes them behind the `Client`, and injects it into the handler |
