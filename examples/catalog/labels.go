@@ -1,6 +1,10 @@
 package catalog
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // Labels is a collection value object: a set of key/value tags on a product
 // (e.g. {"color": "black", "size": "M"}). It wraps a map, so it is
@@ -54,6 +58,22 @@ func (l Labels) Equal(other Labels) bool {
 		}
 	}
 	return true
+}
+
+// String is the display form: sorted "key=value" pairs joined by commas (e.g.
+// "color=black,size=M"). Like every value object, Labels implements
+// fmt.Stringer; it is display only, never an equality path.
+func (l Labels) String() string {
+	keys := make([]string, 0, len(l.values))
+	for k := range l.values {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, len(keys))
+	for i, k := range keys {
+		pairs[i] = fmt.Sprintf("%s=%s", k, l.values[k])
+	}
+	return strings.Join(pairs, ",")
 }
 
 // copyMap returns a shallow copy of m, treating nil as empty.

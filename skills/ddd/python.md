@@ -9,17 +9,24 @@ mechanics live here alongside the objects they orchestrate and persist. Section
 headings here are stable anchors; the resolver and the coverage matrix link to
 them.
 
-> **Verification status — verified.** Every pattern below is backed by a
-> runnable, type-checked worked example under `examples/python/`:
-> the **running arc** (`campaign` value objects and aggregate, `campaignapp`
-> service + repository, and the `linkcampaign`/`linkcampaignimpl`/`main`
-> composition root, wired into a live HTTP service) and the **`catalog`**
-> package (the compound value object `Money` backed by `decimal.Decimal`, and
-> the collection value object `Labels`). The whole tree passes `mypy --strict`
-> and `pytest` in CI — the same bar the Go mechanics meet. Where a Go/Python
-> difference is load-bearing — frozen-dataclass equality vs Go's `Equal`,
-> `Protocol` structural typing vs Go's struct embedding, the absence of
-> `context.Context` — it is called out inline.
+> **Verification status — verified.** The patterns these examples exercise —
+> value objects (simple, compound, collection), the entity and aggregate
+> lifecycle, the application-service seam, the repository, and the composition
+> root — are backed by runnable, type-checked worked examples under
+> `examples/python/`: the **running arc** (`campaign` value objects and
+> aggregate, `campaignapp` service + repository, and the
+> `linkcampaign`/`linkcampaignimpl`/`main` composition root, wired into a live
+> HTTP service) and the **`catalog`** package (the compound value object `Money`
+> backed by `decimal.Decimal`, and the collection value object `Labels`). The
+> whole tree passes `mypy --strict` and `pytest` in CI, the same bar the Go
+> mechanics meet. A few variants are stated below for completeness but shown for
+> shape only — the examples here are all *lifecycle* and *1:1*, so they do not
+> exercise a **fact** aggregate/entity that returns a new instance on change, an
+> explicit **reshaping** `Client`, or a hand-written `__eq__`/`__hash__`; each is
+> marked where it appears. Where a Go/Python difference is load-bearing —
+> frozen-dataclass equality vs Go's `Equal`, `Protocol` structural typing vs
+> Go's struct embedding, the absence of `context.Context` — it is called out
+> inline.
 
 ## Value objects
 
@@ -91,7 +98,9 @@ class Labels:
     _values: tuple[tuple[str, str], ...] = ()   # immutable, hashable storage
 
     def __post_init__(self) -> None:            # canonicalize on EVERY path
-        object.__setattr__(self, "_values", tuple(sorted(self._values)))
+        # dedupe keys (last wins) AND sort, so the raw constructor can't hold a
+        # non-canonical value even with duplicate keys.
+        object.__setattr__(self, "_values", tuple(sorted(dict(self._values).items())))
 
     @classmethod
     def new(cls, values: Mapping[str, str] | None = None) -> "Labels":

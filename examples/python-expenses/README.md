@@ -20,3 +20,9 @@ and only the composition root imports the concrete implementation.
 Committed as-produced (only self-inflicted mypy nits were fixed by the agent),
 so it stands as an honest record of what the skill is sufficient to build. Run
 it the same way as `examples/python` (see that directory's README).
+
+A later whole-repo coherence review hardened one line in `expenses/labels.py`
+(`Labels` now dedupes keys as well as sorts in `__post_init__`) — a gap inherited
+from the skill's own snippet, fixed identically in `python.md` and
+`examples/python/catalog`. It does not reflect on the gate; the PASS verdict is
+unaffected.

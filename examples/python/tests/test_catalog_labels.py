@@ -34,3 +34,16 @@ def test_require_rejects_empty() -> None:
     with pytest.raises(ValueError, match="must not be empty"):
         Labels.require(None)
     assert Labels.require({"color": "black"}).get("color") == "black"
+
+
+def test_raw_constructor_with_duplicate_keys_canonicalizes() -> None:
+    # Even the raw dataclass constructor (not new()/require()) must canonicalize:
+    # duplicate keys dedupe (last wins) so equality/hashing stay content-based.
+    dup = Labels((("a", "1"), ("a", "2")))
+    assert dup == Labels.new({"a": "2"})
+    assert hash(dup) == hash(Labels.new({"a": "2"}))
+    assert dup.as_dict() == {"a": "2"}
+
+
+def test_str_is_sorted_display() -> None:
+    assert str(Labels.new({"size": "M", "color": "black"})) == "color=black,size=M"

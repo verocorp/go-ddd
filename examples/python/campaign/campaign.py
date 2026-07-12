@@ -75,9 +75,12 @@ class Campaign:
 
     @property
     def links(self) -> tuple[ShortLink, ...]:
-        # Defensive copy out — the caller can never mutate the campaign's owned
-        # collection.
-        return tuple(self._links)
+        # Defensive copy out — copies of the owned ENTITIES, not just the
+        # container. ShortLink is mutable, so handing out the real objects would
+        # let a caller call deactivate() on one directly and bypass the root
+        # (deactivate_short_link). In Go this is free (value semantics); in
+        # Python a reference would leak, so each child is cloned.
+        return tuple(link._clone() for link in self._links)
 
     def add_short_link(self, spec: ShortLinkSpec) -> None:
         """Root-guarded transition for the "add a short link to an existing
