@@ -152,9 +152,11 @@ DDD Reference when a relationship isn't one of these four:
   the *Published Language* is the documented interchange schema they exchange in (the
   `Client`'s DTOs can *serve as* it once documented as a stable contract). Best when the
   upstream is stable and serves many consumers.
-- **Conformist** — the downstream adopts the upstream's model as-is, no translation.
-  Cheap, but the downstream breaks when the upstream changes. Acceptable when the
-  upstream is stable and semantically aligned.
+- **Conformist** — the downstream adopts the upstream's model as-is, no translation —
+  usually a position of *weakness*: you can't influence the upstream and translating
+  isn't worth it, so you conform to what you're given. Cheap, but the downstream breaks
+  when the upstream changes; only tolerable when the upstream is stable enough to live
+  with.
 - **Anticorruption Layer (ACL)** — the downstream translates the upstream's shape into
   its own model at the boundary, so upstream churn stops at the translation. Worth its
   cost only when the upstream is unstable or a poor fit. (This is what a vendor
