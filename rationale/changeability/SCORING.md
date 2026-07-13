@@ -56,6 +56,40 @@ the change that discriminates (rather than softening the rule) is the standard
 resolution when the red-team ties on the first change — that is the red-team
 *improving the benchmark*, the intended outcome.
 
+## Declared changes for decision 3 — no outward representation (`nooutward/`)
+
+The decision: **a domain object emits no non-domain representation; the domain
+depends on no outward layer** (`skills/ddd/value-objects.md` "the representation
+never leaks"; the inward-dependency rule the composition-root doctrine assumes).
+The sanctioned exception is explicit: a serializer/projection that *maps* domain →
+DTO in the outward layer is fine — the rule is "no UNINTENDED representation leak,"
+not "never emit a DTO" [F5]. So the coupled arm is a domain that *itself* emits
+its outward form (a `Maneuver.Record()` returning a transport type), not a strawman.
+
+Per F11 the harm of this decision is **dependency direction, not fan-out**, so —
+inverting the anchor's C1/C2 emphasis — the **primary discriminator is a compile
+guard**, and the fan-out is the secondary spine (and, like the anchor's C1, it may
+be *tied* by a cheaper structure — an honest finding, not a failure):
+
+- **D3a — direction guard (primary, compile-detected).** The outward layer
+  (`telemetry`) imports the domain (`nav`) to map it — the correct inward
+  direction. Any attempt to make the domain emit its own outward representation
+  (the domain importing `telemetry`) is therefore an **import cycle: it fails to
+  compile**. Modelled by a `-tags leak` file in `nav` that adds the outward import;
+  `go build -tags leak ./nav` must fail. This is the decision-3 analog of the
+  anchor's `subst_bug.go` — a structural property the language enforces at N=1,
+  not a fan-out count. It is what makes the rule *specific* to dependency
+  direction rather than generic decoupling.
+- **D3b — outward-representation migration (spine, `-tags repv2`).** The outward
+  telemetry format reshapes (a field `BurnSeconds` → `DurationMillis`). A dependent
+  that holds the **pure domain object** (`nav.Maneuver`) is untouched; a dependent
+  that reached through an **emitting domain** (`emit.Maneuver.Record().BurnSeconds`)
+  is forced to change. Contrast at matched N: decoupled 0 vs coupled N at N=8/16.
+  If the red-team reaches 0 forced-edits under D3b with less ceremony (e.g. a
+  shared-leaf DTO both sides import, dodging the cycle), that ties the *spine* —
+  and D3a is then where the direction rule earns its place, exactly as C2 was for
+  the interface.
+
 ## The forced-edit metric (how the count is taken)
 
 For an arm at a given N, apply the arm's **declared change** C, then count the
