@@ -16,16 +16,18 @@ import (
 	"github.com/verocorp/go-ddd/rationale/changeability/nooutward/pub"
 )
 
-// Maneuver wraps the domain aggregate but leaks its outward representation
-// through ToResponse() — the pattern decision 3 keeps in the application service.
+// Maneuver wraps the domain entity but leaks its outward representation through
+// ToResponse() — the pattern decision 3 keeps in the application service.
 type Maneuver struct{ inner domain.Maneuver }
 
-func NewManeuver(id string, burnMillis, thrustMicroN int64) Maneuver {
-	return Maneuver{inner: domain.NewManeuver(
-		domain.NewManeuverID(id),
-		domain.NewBurn(burnMillis),
-		domain.NewThrust(thrustMicroN),
-	)}
+// NewManeuver builds the wrapped domain entity through the domain's own spec
+// constructor, propagating the error (the domain owns validation).
+func NewManeuver(spec domain.ManeuverSpec) (Maneuver, error) {
+	inner, err := domain.NewManeuver(spec)
+	if err != nil {
+		return Maneuver{}, err
+	}
+	return Maneuver{inner: inner}, nil
 }
 
 // ToResponse emits the domain object's outward DTO directly — the leak.

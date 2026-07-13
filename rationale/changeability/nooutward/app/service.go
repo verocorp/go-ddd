@@ -23,10 +23,16 @@ type service struct{}
 func New() pub.Client { return service{} }
 
 func (service) DescribeManeuver(_ context.Context, req pub.DescribeManeuverRequest) (pub.ManeuverResponse, error) {
-	// Convert — request DTO (primitives) -> domain value objects.
-	id := domain.NewManeuverID(req.ManeuverID)
-	// Delegate — the domain work (fixture: construct a representative aggregate).
-	m := domain.NewManeuver(id, domain.NewBurn(4200), domain.NewThrust(9800))
+	// Convert — request DTO (primitives) -> a domain spec (primitives). The burn
+	// and thrust are fixed here only because this fixture has no repository to load
+	// from; a real service would load the aggregate by id in Delegate.
+	spec := domain.ManeuverSpec{ManeuverID: req.ManeuverID, BurnMillis: 4200, ThrustMicroN: 9800}
+	// Delegate — the domain work: construct the aggregate through its constructor,
+	// which owns validation. The service never builds value objects itself.
+	m, err := domain.NewManeuver(spec)
+	if err != nil {
+		return pub.ManeuverResponse{}, err
+	}
 	// Respond — domain object -> response DTO. The one mapping site.
 	return respond(m), nil
 }
