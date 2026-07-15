@@ -23,7 +23,7 @@ def _expense(amount: str = "10.00", currency: str = "USD",
 def _spec(expenses: tuple[ExpenseSpec, ...] = (),
           status: str = ReportStatus.DRAFT.value) -> ReportSpec:
     return ReportSpec(
-        id=ReportID.generate().value,
+        id=str(ReportID.generate()),
         title="Trip to NYC",
         labels={"project": "apollo"},
         expenses=expenses,
@@ -170,7 +170,7 @@ def test_submit_rejects_a_second_submission() -> None:
 
 
 def test_report_equality_is_by_identity() -> None:
-    id_str = ReportID.generate().value
+    id_str = str(ReportID.generate())
     a = ExpenseReport.from_spec(ReportSpec(id=id_str, title="Trip A", expenses=()))
     b = ExpenseReport.from_spec(ReportSpec(id=id_str, title="Trip B", expenses=()))
     assert a == b  # same id, different title -> still the same report

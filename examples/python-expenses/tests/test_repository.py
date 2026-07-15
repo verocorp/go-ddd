@@ -10,7 +10,7 @@ from expensewellimpl.repository import InMemoryExpenseReportRepository
 def test_round_trip_preserves_the_report() -> None:
     repo = InMemoryExpenseReportRepository()
     spec = ReportSpec(
-        id=ReportID.generate().value,
+        id=str(ReportID.generate()),
         title="Trip to NYC",
         labels={"project": "apollo"},
         expenses=(
@@ -33,7 +33,7 @@ def test_round_trip_preserves_the_report() -> None:
 def test_round_trip_preserves_submitted_status() -> None:
     repo = InMemoryExpenseReportRepository()
     report = ExpenseReport.from_spec(
-        ReportSpec(id=ReportID.generate().value, title="Trip", expenses=())
+        ReportSpec(id=str(ReportID.generate()), title="Trip", expenses=())
     )
     report.submit()
     repo.save(report)

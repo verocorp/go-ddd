@@ -43,5 +43,5 @@ class Expense:
         return cls(amount=amount, category=category, receipt_number=receipt_number)
 
     def __post_init__(self) -> None:  # the rules live here, always run
-        if self.amount.amount <= 0:
+        if not self.amount.is_positive():
             raise ValueError("expense amount must be positive")

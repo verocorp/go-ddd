@@ -17,13 +17,14 @@ from decimal import Decimal
 from enum import Enum
 from typing import Mapping, Sequence
 
+from expenses.decimal_amount import DecimalAmount
 from expenses.expense import Expense, ExpenseSpec
 from expenses.identifiers import ReportID, ReportTitle
 from expenses.labels import Labels
 from expenses.money import Money
 
 MAX_EXPENSES = 20
-MAX_TOTAL = Decimal("1000.00")
+MAX_TOTAL = DecimalAmount(Decimal("1000.00"))
 
 
 class ReportStatus(Enum):
@@ -56,21 +57,20 @@ def _validate_expenses(expenses: Sequence[Expense]) -> None:
     if not expenses:
         return
 
-    currency = expenses[0].amount.currency
+    first = expenses[0].amount
     for e in expenses[1:]:
-        if e.amount.currency != currency:
+        if not e.amount.same_currency(first):
             raise ValueError(
                 "all expenses in a report must share one currency "
-                f"(got {e.amount.currency}, expected {currency})"
+                f"(got {e.amount.currency}, expected {first.currency})"
             )
 
     total = expenses[0].amount
     for e in expenses[1:]:
         total = total.add(e.amount)
-    if total.amount > MAX_TOTAL:
+    if total.amount.exceeds(MAX_TOTAL):
         raise ValueError(
-            f"report total {total.amount} {total.currency} exceeds the "
-            f"{MAX_TOTAL} limit"
+            f"report total {total} exceeds the {MAX_TOTAL} limit"
         )
 
 

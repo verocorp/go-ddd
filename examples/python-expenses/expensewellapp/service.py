@@ -64,7 +64,7 @@ class ExpenseReportService:
 
     def create_report(self, req: CreateReportRequest) -> CreateReportResponse:
         spec = ReportSpec(  # 1. Convert
-            id=ReportID.generate().value,
+            id=str(ReportID.generate()),
             title=req.title,
             labels=dict(req.labels),
             expenses=tuple(_to_expense_spec(e) for e in req.expenses),

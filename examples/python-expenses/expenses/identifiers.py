@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ReportID:
-    value: str
+    _value: str
 
     def __post_init__(self) -> None:
-        if not self.value:
+        if not self._value:
             raise ValueError("report id must not be empty")
 
     @classmethod
@@ -17,40 +17,40 @@ class ReportID:
         return cls(str(uuid.uuid4()))
 
     def __str__(self) -> str:
-        return self.value
+        return self._value
 
 
 @dataclass(frozen=True)
 class ReportTitle:
-    value: str
+    _value: str
 
     def __post_init__(self) -> None:
-        if not self.value.strip():
+        if not self._value.strip():
             raise ValueError("report title must not be empty")
 
     def __str__(self) -> str:
-        return self.value
+        return self._value
 
 
 @dataclass(frozen=True)
 class ReceiptNumber:
-    value: str
+    _value: str
 
     def __post_init__(self) -> None:
-        if not self.value.strip():
+        if not self._value.strip():
             raise ValueError("receipt number must not be empty")
 
     def __str__(self) -> str:
-        return self.value
+        return self._value
 
 
 @dataclass(frozen=True)
 class Category:
-    value: str
+    _value: str
 
     def __post_init__(self) -> None:
-        if not self.value.strip():
+        if not self._value.strip():
             raise ValueError("category must not be empty")
 
     def __str__(self) -> str:
-        return self.value
+        return self._value
