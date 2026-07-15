@@ -103,10 +103,15 @@ is any entity **transitively composed below a root**, accessed only through it.
 
 | Signal | Verdict |
 |---|---|
-| hides its field (no public primitive field, no getter beyond `__str__`) + validates + is a `Stringer` | **domain VO** |
+| no public *primitive* field; accessors return only VOs / safe single-rep values / defensive copies (never the raw multi-rep primitive); validates; is a `Stringer` | **domain VO** |
 | public primitive fields + no validation + no behavior | **spec** |
 
-Exposure and validation both point the same way, so spec-vs-VO is decidable.
+Exposure and validation both point the same way, so spec-vs-VO is decidable. A
+VO *may* expose accessors (returning another VO, a safe single-representation
+value, or a defensive copy) — the ban is only on leaking the raw
+multi-representation primitive. A multi-rep primitive (a `Decimal` amount) is
+wrapped in its own VO (`DecimalAmount`) and exposed as that VO; a leaf VO's own
+primitive has no accessor at all, only `__str__`.
 
 ---
 
@@ -219,16 +224,15 @@ the "other"/value-family rules above.
    (exclude enums, `Protocol`s, exceptions, nested helpers). **Only the
    "unclassified domain object → flag" exhaustiveness check needs this**; every
    positive per-type check fires on signature matches and ships without it.
-2. **Int-backed VO exposure** — the *principle* is decided (no typed primitive
-   accessor; hide the field; the value exits only at the boundary via `.String()`
-   / VO-returning accessor chains; no domain-object `decompose`), with prior-art
-   provenance (certus `.Spec()` red-team, `go.md:97`). What is missing is a
-   **worked Python example** of an `int`/`Decimal`-backed VO round-tripping
-   through `.String()` — the "wrap-at-construction / unwrap-via-`String()`"
-   round-trip is itself flagged as a smell in the certus notes, so the example
-   needs to settle the persistence path (String round-trip vs a compound whose
-   fields are themselves VOs). `Money` (Decimal-backed compound) is exactly this
-   worked example. Blocks no *check*; blocks the compound-VO example pass.
+2. **Int/Decimal-backed VO exposure — RESOLVED.** The worked example shipped:
+   `examples/python-expenses/expenses/decimal_amount.py` — a `DecimalAmount` VO
+   wraps the exact `Decimal` (value equality so `1.5 == 1.50`; domain methods
+   `is_positive`/`add`/`exceeds`; `__str__` as the sole serialization surface).
+   `Money` holds it hidden and exposes it as a VO accessor; the boundary unwraps
+   via that accessor + `str()`, never a raw `Decimal` and never a domain-object
+   `decompose`. This is Option 2 (the certus/`quanta.Decimal` pattern), chosen
+   over a `String()` round-trip because that round-trip is the smell the certus
+   notes flagged.
 3. **Do specs live in `*/domain/**`** — they sit beside domain types; detection
    classifies them by signature regardless, so this is a labeling call, not a
    blocker.
