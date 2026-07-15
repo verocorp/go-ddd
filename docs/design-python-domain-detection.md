@@ -124,8 +124,15 @@ Exposure and validation both point the same way, so spec-vs-VO is decidable.
 4. **Construction discipline.** A structured domain object is built from outside
    the boundary through its **spec + `from_spec`**; leaf primitive-wrapper VOs
    construct directly and validate in `__post_init__`. Collection VOs may take a
-   raw collection. The spec is the boundary surface *both directions* — inbound
-   `from_spec`, outbound `decompose`.
+   raw collection. The spec is the **inbound** construction surface only. A
+   domain object exposes **no public `decompose()`/`.Spec()` method** — a
+   public decompose-to-primitives surface was **red-teamed out in certus**
+   (it enables string/decomposed-form equality that bypasses value equality, and
+   is a "public decompiler" representation leak). The primitive leaves the domain
+   **only at the service/repository boundary**, unwrapped *inline there*
+   (accessor chains that return VOs, `.String()` at the very edge — that is where
+   cross-domain translation legitimately lives). **Domain functions return domain
+   types, never raw primitives/collections.**
 5. **Value family = VO / event / collection-VO / spec**, forked by
    validates-or-not.
 6. **Semantic invariants are the user's to test, never the analyzer's.**
@@ -136,10 +143,14 @@ Exposure and validation both point the same way, so spec-vs-VO is decidable.
   (`MoneySpec{Amount, Currency}`) — the compiler-level spec/VO line.
 - **Every VO implements `fmt.Stringer`**; `String()` is the display method AND
   the *sole* string accessor — no `ToString()` (`go.md:97`).
-- **No typed primitive accessor anywhere** — no `Int()`/`Value()`/`Amount()`.
-  `Money` exposes `Currency()` (a safe single-representation value) but never the
-  `*big.Rat` amount; `Labels.Values()` returns a **defensive copy**.
-- Equality is by value (`Equal`/`==`), never by `String()`.
+- **No typed accessor that returns the raw multi-representation primitive** — no
+  `Int()`/`Value()`/`Amount()` handing back the wrapped `int`/`*big.Rat`/`Decimal`.
+  An accessor *may* return **another value object** (certus: `Quantity() →
+  quanta.Decimal`, itself a VO), a **safe single-representation value**
+  (`Money.Currency()` → a currency code), or a **defensive copy** of a
+  collection (`Labels.Values()`). The ban is on leaking the raw
+  multi-representation primitive, not on all accessors.
+- Equality is by value (`Equal`/`==`), never by `String()` or a decomposed form.
 
 ---
 
@@ -208,10 +219,16 @@ the "other"/value-family rules above.
    (exclude enums, `Protocol`s, exceptions, nested helpers). **Only the
    "unclassified domain object → flag" exhaustiveness check needs this**; every
    positive per-type check fires on signature matches and ships without it.
-2. **Int-backed VO exposure** — no worked example exists; `String()`-only vs an
-   outbound `decompose` is undecided. Defaults cleanly to "hidden field,
-   `__str__` + decompose"; blocks no check. Needs a worked example to become
-   verified-impl-backed guidance.
+2. **Int-backed VO exposure** — the *principle* is decided (no typed primitive
+   accessor; hide the field; the value exits only at the boundary via `.String()`
+   / VO-returning accessor chains; no domain-object `decompose`), with prior-art
+   provenance (certus `.Spec()` red-team, `go.md:97`). What is missing is a
+   **worked Python example** of an `int`/`Decimal`-backed VO round-tripping
+   through `.String()` — the "wrap-at-construction / unwrap-via-`String()`"
+   round-trip is itself flagged as a smell in the certus notes, so the example
+   needs to settle the persistence path (String round-trip vs a compound whose
+   fields are themselves VOs). `Money` (Decimal-backed compound) is exactly this
+   worked example. Blocks no *check*; blocks the compound-VO example pass.
 3. **Do specs live in `*/domain/**`** — they sit beside domain types; detection
    classifies them by signature regardless, so this is a labeling call, not a
    blocker.
