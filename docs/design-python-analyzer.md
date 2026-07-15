@@ -9,11 +9,10 @@ adversarial-LLM/Codex review loop for catching DDD-convention gaps.
 ## Findings that set the plan
 
 1. **The Go tree is green.** `go test ./...`, `go vet`, `gofmt` all clean on
-   `main`. The "VO checker/vet failures after entities+aggregates" are **not in
-   the toolkit** — the last commits (`307367a`, `9fc1a52`) are "pass ddd-vet"
-   fixes. Any remaining failures live in a **consumer repo** (certus / metron /
-   quanta / rhema) whose code predates the entities/aggregates conventions.
-   That is a consumer migration, not a go-ddd fix, and does not block rhema.
+   `main`. The "VO checker/vet failures after entities+aggregates" were **already
+   fixed in this repo** — the last commits (`307367a`, `9fc1a52`) are the "pass
+   ddd-vet" fixes. Confirmed dropped; there is no toolkit or consumer item to
+   chase, and nothing here blocks rhema.
 
 2. **Python guidance already ships; enforcement does not.** `skills/ddd/python.md`
    + `examples/python/` cover the whole stack rhema is building (VO simple/
@@ -89,20 +88,29 @@ residuals are **out of v1**.
 - **P0 — `ddd-vet-py` v1, now.** The one workstream that serves rhema and is the
   stated goal. Step 1 (pin the check-set against `python.md`) absorbs most of the
   Python-side skill-reconciliation worry.
-- **P1 — fast-follow, after rhema has real domain code.** Decide the two
-  type-aware residuals (identity-`__eq__` field; deeper hash hazards) →
-  mypy-plugin vs drop, based on whether they actually bite. Optional flake8 adapter.
-- **P2 — rationale decisions 1 & 4** (app-service SRP; repo speaks domain
-  objects). Not blocking rhema. Strongest as **real-code corroboration against
-  rhema's own app-services/repos** (the `anchor/CORROBORATION.md` pattern), which
-  is another reason it sits after rhema has that code.
-- **Triage — the Go "failures."** Locate them (which consumer repo). Toolkit is
-  green; this is a consumer migration, decoupled from the analyzer.
+- **P1 — mypy-plugin decision, after rhema has real domain code.** The syntactic
+  v1 checks approximate the primitive-obsession field rule ("VO fields are value
+  objects, not raw primitives") by reading annotation *text* — spoofable by
+  aliases / `NewType` / imported names. A mypy plugin resolves it honestly, and
+  reaches the two comparability residuals AST can't (a field whose class lacks
+  `__eq__` and compares by identity; a hash hazard from a non-literal unhashable
+  field type). Cost: mypy's plugin API is unstable + thinly documented and pins a
+  version range. So **decide mypy-plugin vs drop based on whether those hazards
+  actually leak in real rhema code**, not speculatively. Freebie (not the plugin):
+  `NewType`/`Annotated` VOs make plain mypy catch unit-swap bugs for free.
+  Optional flake8 adapter for editor-inline here too.
+- **P2 — decisions 1 & 4 as a second wave of checks (NOT rhema-gated).** These
+  have enforceable surfaces writable now, right after the v1 ports ship:
+  decision 4 (repo speaks domain objects) → flag a repository method signature
+  that takes/returns primitives or DTOs instead of domain types; decision 1
+  (app-service SRP) → the domain-logic-leakage check (`for`-loop over domain
+  objects / arithmetic inside an app service) `application-services.md` already
+  describes. Testdata fixtures like v1. This is independent of the pending
+  **rationale arms** for decisions 1 & 4 (the changeability *proof*, synthetic,
+  also not rhema-gated) — enforcement does not wait on the proof.
 
-## Open question
-
-Where were the Go checker/vet failures observed? `main` is green, so they are in
-a consumer repo — which one, and is its CI currently red on `ddd-vet`?
+_(Dropped: Go-checker-failure triage — the toolkit tree is green and the failures
+were already fixed in this repo; there was no consumer-repo item to chase.)_
 
 ## The assignment
 
