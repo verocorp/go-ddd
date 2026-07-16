@@ -224,15 +224,18 @@ the "other"/value-family rules above.
    (exclude enums, `Protocol`s, exceptions, nested helpers). **Only the
    "unclassified domain object → flag" exhaustiveness check needs this**; every
    positive per-type check fires on signature matches and ships without it.
-2. **Int/Decimal-backed VO exposure — RESOLVED.** The worked example shipped:
-   `examples/python-expenses/expenses/decimal_amount.py` — a `DecimalAmount` VO
-   wraps the exact `Decimal` (value equality so `1.5 == 1.50`; domain methods
-   `is_positive`/`add`/`exceeds`; `__str__` as the sole serialization surface).
-   `Money` holds it hidden and exposes it as a VO accessor; the boundary unwraps
-   via that accessor + `str()`, never a raw `Decimal` and never a domain-object
-   `decompose`. This is Option 2 (the certus/`quanta.Decimal` pattern), chosen
-   over a `String()` round-trip because that round-trip is the smell the certus
-   notes flagged.
+2. **Int/Decimal-backed VO exposure — pattern decided; worked example pending.**
+   The pattern: a `DecimalAmount` VO wraps the exact `Decimal` (value equality so
+   `1.5 == 1.50`; domain methods `is_positive`/`add`/`exceeds`; `__str__` as the
+   sole serialization surface); the owning type holds it hidden and exposes it as
+   a VO accessor; the boundary unwraps via that accessor + `str()`, never a raw
+   `Decimal` and never a domain-object `decompose`. This is Option 2 (the
+   certus/`quanta.Decimal` pattern), chosen over a `String()` round-trip because
+   that round-trip is the smell the certus notes flagged. The worked example
+   previously lived in `examples/python-expenses`, which was **removed** because
+   its `ExpenseReport` "aggregate root" owned a collection of *value objects*,
+   contradicting the settled root definition (§2: a root embeds ≥1 **entity**).
+   Re-create the `DecimalAmount` example in a spec-correct tree when one needs it.
 3. **Do specs live in `*/domain/**`** — they sit beside domain types; detection
    classifies them by signature regardless, so this is a labeling call, not a
    blocker.

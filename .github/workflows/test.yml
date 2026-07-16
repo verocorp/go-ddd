@@ -52,12 +52,11 @@ jobs:
         run: go test ./gclplugin/ -run CustomGCL -v
 
   python-example:
-    # Gates the Python worked examples at the same bar as the Go mechanics:
+    # Gates the Python worked example at the same bar as the Go mechanics:
     # mypy --strict and pytest must both be clean, so skills/ddd/python.md never
     # encodes a pattern that isn't backed by running, type-checked code.
-    # examples/python is the reference rendering; examples/python-expenses is the
-    # fresh-agent acceptance-gate output.
-    name: python examples (mypy --strict + pytest)
+    # examples/python is the reference rendering.
+    name: python example (mypy --strict + pytest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -70,11 +69,6 @@ jobs:
         working-directory: examples/python
         run: |
           MYPYPATH=. mypy --strict campaign campaignapp linkcampaign linkcampaignimpl transport catalog main.py tests conftest.py
-          pytest -q
-      - name: examples/python-expenses — mypy --strict + pytest
-        working-directory: examples/python-expenses
-        run: |
-          MYPYPATH=. mypy --strict .
           pytest -q
 
   ddd-vet-py:

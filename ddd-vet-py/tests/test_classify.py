@@ -1,8 +1,8 @@
-"""The classifier, verified against the (reworked, conformant) worked examples.
+"""The classifier, verified against the (reworked, conformant) worked example.
 
 This is the acceptance gate for pass-1/pass-2 classification: every domain type
-in ``examples/python`` and ``examples/python-expenses`` must land in the
-stereotype the design intends, with the right structural attributes.
+in ``examples/python`` must land in the stereotype the design intends, with the
+right structural attributes.
 """
 
 import os
@@ -36,27 +36,8 @@ def test_link_campaign_domain_classification() -> None:
     assert reg["ShortLink"].is_member is True
     assert reg["ShortLink"].owns_collection is False
 
-    # An aggregate root: identity + owns a collection of domain objects.
+    # An aggregate root: a reference-identity entity that embeds ≥1 entity
+    # (Campaign embeds the ShortLink entity) — the settled spec's root signal.
     assert reg["Campaign"].stereotype is Stereotype.IDENTITY_OBJECT
     assert reg["Campaign"].owns_collection is True
     assert reg["Campaign"].is_member is False
-
-
-def test_expenses_domain_classification() -> None:
-    reg = _classify("python-expenses/expenses")
-
-    for name in [
-        "DecimalAmount", "Money", "Expense", "Labels",
-        "ReportID", "ReportTitle", "ReceiptNumber", "Category",
-    ]:
-        assert reg[name].stereotype is Stereotype.VALUE_OBJECT, name
-
-    for name in ["MoneySpec", "ExpenseSpec", "ReportSpec"]:
-        assert reg[name].stereotype is Stereotype.SPEC, name
-
-    # The aggregate owns a collection of Expense value objects (owning a
-    # collection of domain objects — entity OR VO — is the aggregate signal;
-    # "embeds an entity" alone would miss this VO-collection case).
-    assert reg["ExpenseReport"].stereotype is Stereotype.IDENTITY_OBJECT
-    assert reg["ExpenseReport"].owns_collection is True
-    assert reg["ExpenseReport"].is_member is False
