@@ -10,7 +10,7 @@ entity vs aggregate), which v1 does not need.
 import ast
 
 from ddd_vet.astutil import _annotation_base, _dataclass_frozen, _is_str_call
-from ddd_vet.classify import classify_trees
+from ddd_vet.classify import ClassInfo, classify_trees
 from ddd_vet.finding import Finding
 from ddd_vet.typed_checks import check_typed
 
@@ -148,19 +148,43 @@ class _Checker(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def check_source(path: str, source: str, is_test: bool) -> list[Finding]:
-    """Parse ``source`` and return every finding, sorted by location.
+def check_tree(
+    path: str,
+    source: str,
+    tree: ast.Module,
+    is_test: bool,
+    registry: dict[str, ClassInfo],
+) -> list[Finding]:
+    """Every finding for one already-parsed file, against a shared registry.
 
-    Runs the syntactic per-file checks (DDD001-004) and the classification-aware
-    checks (DDD010+). The latter classify this single source into the stereotype
-    registry — enough for per-class rules like VO exposure; whole-tree runs
-    (``run_paths``) resolve cross-file embedding for the same registry.
+    The syntactic checks (DDD001-004) read only this file's shape. The
+    classification-aware checks (DDD010+) key on ``registry`` — which
+    ``run_paths`` builds across the *whole tree*, so cross-file embedding
+    (``owns_collection``, ``is_member``) resolves. Test files are exempt from the
+    typed checks (they legitimately construct and exercise domain objects).
     """
-    tree = ast.parse(source, filename=path)
     checker = _Checker(path, source, is_test)
     checker.visit(tree)
     findings = list(checker.findings)
     if not is_test:
-        registry = classify_trees({path: tree})
         findings.extend(check_typed(registry, path, tree, source))
     return sorted(findings, key=lambda f: (f.line, f.col, f.code))
+
+
+def check_source(
+    path: str,
+    source: str,
+    is_test: bool,
+    registry: dict[str, ClassInfo] | None = None,
+) -> list[Finding]:
+    """Parse ``source`` and return every finding, sorted by location.
+
+    Single-file entry point (CLI on one file, unit tests). When ``registry`` is
+    omitted, the file is classified *in isolation* — correct for axis-1
+    stereotypes (identity signals are local) but blind to cross-file embedding;
+    ``run_paths`` passes a whole-tree registry so embedding resolves.
+    """
+    tree = ast.parse(source, filename=path)
+    if registry is None:
+        registry = classify_trees({path: tree})
+    return check_tree(path, source, tree, is_test, registry)

@@ -1,8 +1,10 @@
 """File discovery, test-scoping, and the run entry points."""
 
+import ast
 import os
 
-from ddd_vet.checks import check_source
+from ddd_vet.checks import check_source, check_tree
+from ddd_vet.classify import classify_trees
 from ddd_vet.finding import Finding
 
 # Directories never worth scanning. ``testdata`` holds intentionally
@@ -58,13 +60,21 @@ def _iter_py_files(root: str) -> list[str]:
 
 
 def run_paths(paths: list[str]) -> tuple[list[Finding], list[str]]:
-    """Check every ``.py`` file under ``paths``.
+    """Check every ``.py`` file under ``paths`` as one tree.
+
+    Two passes so the classifier sees the *whole* tree: first read+parse every
+    file into a shared ``{path: tree}``, then classify once and check each file
+    against that one registry. This is what makes cross-file embedding
+    (``owns_collection``, ``is_member``) resolve — a per-file registry cannot see
+    that ``Campaign`` owns a ``ShortLink`` defined in another module.
 
     Returns (findings, errors) where ``errors`` are human-readable messages for
-    files that could not be read or parsed.
+    files that could not be read or parsed (those files are excluded from the
+    registry and the checks, not fatal to the run).
     """
-    findings: list[Finding] = []
     errors: list[str] = []
+    trees: dict[str, ast.Module] = {}
+    sources: dict[str, str] = {}
     seen: set[str] = set()
     for root in paths:
         for path in _iter_py_files(root):
@@ -78,8 +88,22 @@ def run_paths(paths: list[str]) -> tuple[list[Finding], list[str]]:
                 errors.append(f"{path}: cannot read: {e}")
                 continue
             try:
-                findings.extend(run_source(path, source))
+                trees[path] = ast.parse(source, filename=path)
+                sources[path] = source
             except SyntaxError as e:
                 errors.append(f"{path}:{e.lineno}: syntax error: {e.msg}")
+
+    # Classify domain code only — test files construct and exercise domain types
+    # but are not themselves domain, and a test fixture class must not shadow a
+    # domain type in the shared registry.
+    registry = classify_trees(
+        {path: tree for path, tree in trees.items() if not is_test_path(path)}
+    )
+
+    findings: list[Finding] = []
+    for path, tree in trees.items():
+        findings.extend(
+            check_tree(path, sources[path], tree, is_test_path(path), registry)
+        )
     findings.sort(key=lambda f: (f.path, f.line, f.col, f.code))
     return findings, errors
