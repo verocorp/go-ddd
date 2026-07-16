@@ -17,6 +17,11 @@ key on what a class *is* (``classify.ClassInfo``):
   spec)`` is the single construction path; no separate ``from_spec`` factory and
   no value-taking constructor. Value objects are exempt (compound-VO
   construction is a separate, unsettled question).
+* **DDD014** (value objects + identity objects) — equality must match the
+  stereotype: a value object compares by value; an entity defines ``__eq__`` and
+  ``__hash__`` together (by ID); an aggregate root blocks accidental equality
+  (``__eq__ = None`` / ``__hash__ = None``). The check the classifier was built to
+  enable — equality is what *defines* each domain type.
 """
 
 import ast
@@ -66,6 +71,10 @@ def check_typed(
         info = registry.get(stmt.name)
         if info is None:
             continue
+        if info.stereotype in (Stereotype.VALUE_OBJECT, Stereotype.IDENTITY_OBJECT):
+            # Equality is the defining property of every domain type — the check
+            # the classifier was built to enable (see design §5).
+            findings.extend(_check_equality(stmt, info, path, suppressed))
         if info.stereotype is Stereotype.VALUE_OBJECT:
             findings.extend(_check_vo_exposure(stmt, path, suppressed))
         elif info.stereotype is Stereotype.IDENTITY_OBJECT:
@@ -101,6 +110,78 @@ def _check_vo_exposure(
                 )
             )
     return findings
+
+
+def _check_equality(
+    node: ast.ClassDef, info: ClassInfo, path: str, suppressed: "_Suppressed"
+) -> list[Finding]:
+    """DDD014 — equality must match the stereotype.
+
+    * value object → compares by value; it must not *block* equality.
+    * entity → identity equality, with ``__eq__`` and ``__hash__`` defined
+      *together* (a lone ``__eq__`` silently makes it unhashable).
+    * aggregate root → *blocks* accidental equality: ``__eq__ = None`` and
+      ``__hash__ = None`` (an aggregate is not a value; comparing two is a bug).
+    """
+    eq_method, eq_none, hash_method, hash_none = _eq_hash_shape(node)
+    findings: list[Finding] = []
+
+    def flag(message: str) -> None:
+        if not suppressed(node.lineno):
+            findings.append(
+                Finding(path, node.lineno, node.col_offset + 1, "DDD014", message)
+            )
+
+    if info.stereotype is Stereotype.VALUE_OBJECT:
+        if eq_none:
+            flag(
+                f"value object {node.name!r} blocks equality (__eq__ = None); a "
+                "value object compares by value — blocking equality is an "
+                "aggregate's rule, not a value object's"
+            )
+    elif info.is_aggregate_root:
+        if eq_method and not eq_none:
+            flag(
+                f"aggregate root {node.name!r} defines __eq__; an aggregate is "
+                "not a value — block accidental equality with __eq__ = None and "
+                "__hash__ = None"
+            )
+        elif eq_none and not hash_none:
+            flag(
+                f"aggregate root {node.name!r} blocks __eq__ but not __hash__; "
+                "block both — set __hash__ = None too"
+            )
+    else:  # entity (identity object that is not an aggregate root)
+        if eq_method and not hash_method:
+            flag(
+                f"entity {node.name!r} defines __eq__ without __hash__; define "
+                "them together (identity by ID) — a lone __eq__ makes the entity "
+                "unhashable"
+            )
+    return findings
+
+
+def _eq_hash_shape(node: ast.ClassDef) -> tuple[bool, bool, bool, bool]:
+    """``(eq_method, eq_none, hash_method, hash_none)`` — how the class handles
+    ``__eq__``/``__hash__``: a real method definition, or an ``= None`` class-body
+    assignment that blocks it."""
+    eq_method = eq_none = hash_method = hash_none = False
+    for stmt in node.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if stmt.name == "__eq__":
+                eq_method = True
+            elif stmt.name == "__hash__":
+                hash_method = True
+        elif isinstance(stmt, ast.Assign):
+            blocked = isinstance(stmt.value, ast.Constant) and stmt.value.value is None
+            for tgt in stmt.targets:
+                if not (blocked and isinstance(tgt, ast.Name)):
+                    continue
+                if tgt.id == "__eq__":
+                    eq_none = True
+                elif tgt.id == "__hash__":
+                    hash_none = True
+    return eq_method, eq_none, hash_method, hash_none
 
 
 def _check_collection_leak(

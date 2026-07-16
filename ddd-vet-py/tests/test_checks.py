@@ -84,3 +84,55 @@ def test_ddd002_exempts_a_spec_row_collection_field() -> None:
         "    labels: dict[str, str]\n"
     )
     assert check_source("row.py", src, is_test=False) == []
+
+
+def test_ddd014_value_object_must_not_block_equality() -> None:
+    # A value object compares by value; __eq__ = None (blocking) is an
+    # aggregate's rule, not a VO's.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Amount:\n"
+        "    _value: int\n"
+        "    __eq__ = None\n"
+    )
+    assert "DDD014" in {f.code for f in check_source("a.py", src, is_test=False)}
+
+
+def test_ddd014_aggregate_root_must_block_equality() -> None:
+    # Group embeds the Member entity (a collection of them) → aggregate root; it
+    # must block equality with __eq__ = None, not define an __eq__.
+    src = (
+        "class Member:\n"
+        "    def __init__(self, id: str) -> None:\n"
+        "        self._id = id\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return isinstance(other, Member) and other._id == self._id\n"
+        "    def __hash__(self) -> int:\n"
+        "        return hash(self._id)\n"
+        "class Group:\n"
+        "    def __init__(self, members: list) -> None:\n"
+        "        self._members = list(members)\n"
+        "    @property\n"
+        "    def members(self) -> tuple[Member, ...]:\n"
+        "        return tuple(self._members)\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return other is self\n"
+        "    def __hash__(self) -> int:\n"
+        "        return id(self)\n"
+    )
+    codes = {f.code for f in check_source("g.py", src, is_test=False)}
+    assert "DDD014" in codes
+
+
+def test_ddd014_entity_with_paired_eq_hash_is_clean() -> None:
+    src = (
+        "class Widget:\n"
+        "    def __init__(self, id: str) -> None:\n"
+        "        self._id = id\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return isinstance(other, Widget) and other._id == self._id\n"
+        "    def __hash__(self) -> int:\n"
+        "        return hash(self._id)\n"
+    )
+    assert {f.code for f in check_source("w.py", src, is_test=False)} == set()

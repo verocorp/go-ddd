@@ -203,5 +203,6 @@ classifier design
 | `aggregatefield` (defensive-copy) | `DDD011` no-collection-leak | an aggregate/entity accessor returns a defensive copy, never the backing mutable collection, keyed on the classifier | `ddd011/{good,bad}.py` |
 | `aggregateref` (boundary) | `DDD012` reference-roots-by-id | an aggregate references another root by its ID value object, never by holding the root object; keyed on the whole-tree registry (a root is a reference-identity entity that embeds ≥1 entity — `is_aggregate_root`) | `ddd012/{good,bad}.py` |
 | (construction) | `DDD013` construct-through-spec | a structured domain object (entity/aggregate) constructs through `__init__(self, spec)`; no separate `from_spec` factory (the value-taking-ctor half is a deferred extension) | `ddd013/{good,bad}.py` |
+| `comparability` / `equalitytest` | `DDD014` equality-by-type | equality matches the stereotype: VO compares by value (never blocks); entity defines `__eq__`+`__hash__` together (by ID); aggregate root blocks equality (`__eq__ = None`/`__hash__ = None`) — keyed on the classifier | `ddd014/{good,bad}.py` |
 | `mustnew` | — dissolved | "No `Must*` twin is needed" | — |
 | (type-aware residual) | — deferred (P1) | primitive-obsession field resolution; identity-`__eq__` field | — |

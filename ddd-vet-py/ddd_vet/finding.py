@@ -82,6 +82,13 @@ CHECKS: tuple[CheckMeta, ...] = (
         "a structured domain object (entity/aggregate) constructs through its "
         "spec — __init__(self, spec); no separate from_spec factory",
     ),
+    CheckMeta(
+        "DDD014",
+        "equality-by-type",
+        "equality must match the stereotype: a value object compares by value; "
+        "an entity defines __eq__ and __hash__ together (by ID); an aggregate "
+        "root blocks accidental equality (__eq__ = None / __hash__ = None)",
+    ),
 )
 
 

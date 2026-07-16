@@ -38,8 +38,6 @@ class Order:  # a separate aggregate root
         self._id = id
         self._warehouse = warehouse  # holds another ROOT by object — DDD012
 
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, Order) and other._id == self._id
-
-    def __hash__(self) -> int:
-        return hash(self._id)
+    # An aggregate root blocks accidental equality (it is not a value).
+    __eq__ = None  # type: ignore[assignment]
+    __hash__ = None  # type: ignore[assignment]
