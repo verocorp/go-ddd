@@ -98,7 +98,7 @@ Construction mechanics: `go.md#repositories` / `python.md#repositories`.
 
 ## How the machine sees it
 
-**No analyzer backs this in v2.** A repository has no structural signal `ddd-vet`
+**No analyzer backs this in v2.** A repository has no structural signal `tessercheck`
 keys on. The tell that logic has leaked into a repo — arithmetic on domain
 quantities, a conditional on domain state, an invariant check — is the same
 signal set as the application-service leakage checks

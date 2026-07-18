@@ -33,4 +33,4 @@ var All = []*analysis.Analyzer{
 // parked: it is only a name-existence tripwire, and porting it to go/analysis
 // hit the source<->test package-variant problem. comparability (#7, widened to
 // pointer/interface fields) covers the structural equality hazard instead. See
-// docs/design-tessercheck-migration.md "Parked" for the revisit conditions.
+// docs/design-ddd-vet-migration.md "Parked" for the revisit conditions.

@@ -97,7 +97,7 @@ cycle** — the earlier cycle only appeared because that fixture wrongly put the
 domain→DTO mapper inside a package that imported the domain. The no-outward-
 representation rule is a **convention the compiler does not enforce**; the D3
 fan-out above is what justifies it. (Enforcement, if wanted, is a lint/analyzer —
-consistent with why `ddd-vet` exists — not the type system.)
+consistent with why `tessercheck` exists — not the type system.)
 
 ## The forced-edit metric (how the count is taken)
 

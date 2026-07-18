@@ -11,7 +11,7 @@ tracked openly, neither is allowed to be silent.
 
 > Enforcement moved from the standalone `cmd/check*` directory-walkers to the
 > `go/analysis` analyzers in `tessercheck` (see
-> [`docs/design-tessercheck-migration.md`](../docs/design-tessercheck-migration.md)). The
+> [`docs/design-ddd-vet-migration.md`](../docs/design-ddd-vet-migration.md)). The
 > rows below name the analyzers; the guard keys off the `analyzers.All` registry
 > so it stays live after the old walkers are deleted.
 
@@ -23,7 +23,7 @@ tracked openly, neither is allowed to be silent.
 | VO constructors get `MustNew*` helpers | `TestMustReimplementation_HandRolledHelpersDiverge` (consistency demo, table below) | without it, authors reinvent divergent must-helpers | `mustnew` | ✅ consistency demo |
 | `.String()` is for display, not equality | `TestEqualityByString_InconsistentIsWrong` — display-string equality mis-equates `0°C` and `273.15K` | `a.String() == b.String()` mis-equates multi-rep VOs | `stringequality` | ✅ 1:1 |
 
-**Reading the gaps:** the ❌ row (distinct types) is a win go-ddd does not yet
+**Reading the gaps:** the ❌ row (distinct types) is a win tesser-build does not yet
 enforce. The two ⚠️ rows are honest partials worth naming: **value equality** lost
 its enforcer when `equalitytest` (the `Test*_Equality` existence tripwire) was
 parked — `comparability` now guards the structural `==` hazard (pointer/interface

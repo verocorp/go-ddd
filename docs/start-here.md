@@ -63,6 +63,6 @@ You don't have to take all of it at once:
 2. **Skill** — copy `skills/tesser-build/` into your repo (see the README's
    "Distribution" section) so agents build new domain objects consistently
    from day one. This is the highest-leverage step for agent-heavy codebases.
-3. **CI** — install `ddd-vet` (README) so the conventions can't silently
+3. **CI** — install `tessercheck` (README) so the conventions can't silently
    erode. Generate your exclude list with `-gen-excludes` and ratify it by
    hand — the machine flags candidates; you make the domain calls.

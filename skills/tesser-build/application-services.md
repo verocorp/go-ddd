@@ -124,7 +124,7 @@ from — the domain object's representation still never lives on the domain obje
 ## How the machine sees it
 
 **No analyzer backs this in v2.** Unlike value objects, entities, and
-aggregates, an application service has no structural signal `ddd-vet` keys on;
+aggregates, an application service has no structural signal `tessercheck` keys on;
 its correctness is enforced by review, not the compiler. The leakage checks
 below are a *future*-analyzer seed, not a live check — and even then only two of
 the four grep cleanly. A `for`-loop over domain objects is not by itself a

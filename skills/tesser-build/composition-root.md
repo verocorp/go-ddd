@@ -195,11 +195,11 @@ place that changes when you swap infrastructure. Construction mechanics:
 ## How the machine sees it
 
 **No analyzer backs this.** Neither the public interface nor the composition root
-has a structural signal `ddd-vet` keys on today — a `Client` that returns a
+has a structural signal `tessercheck` keys on today — a `Client` that returns a
 domain object, or a second site that constructs a concrete to choose an impl, is
 caught by **review, not the compiler**. Two enforcement upgrades are named, not
 built: `internal/` would make the import boundary compiler-enforced, and a
-`ddd-vet` no-leak analyzer on `Client` signatures is a candidate future
+`tessercheck` no-leak analyzer on `Client` signatures is a candidate future
 increment. The tells a reviewer looks for:
 - a **domain type in a `Client` method signature** — a boundary leak;
 - a **`New<concrete>` call outside the composition root** that selects an impl —
