@@ -17,9 +17,10 @@ from typing import Any
 
 from bootstrap.bootstrap import App, new
 from bootstrap.config import Config
+from campaign.adapters.handlers.http import Handler, Response
 from campaign.wiring.config import Config as CampaignConfig
 from linkpolicy.wiring.config import Config as LinkPolicyConfig
-from campaign.adapters.handlers.http import Handler, Response
+from reports.wiring.config import Config as ReportsConfig
 
 
 def make_server(addr: tuple[str, int], app: App) -> ThreadingHTTPServer:
@@ -67,6 +68,7 @@ def main() -> None:
     cfg = Config(
         campaign=CampaignConfig(storage=os.getenv("CAMPAIGN_STORAGE") or ""),
         linkpolicy=LinkPolicyConfig(storage=os.getenv("LINKPOLICY_STORAGE") or ""),
+        reports=ReportsConfig(),
     )
     app = new(cfg)  # graph built once per process
     host = os.getenv("HTTP_HOST") or ""  # the host's OWN launch config, same edge

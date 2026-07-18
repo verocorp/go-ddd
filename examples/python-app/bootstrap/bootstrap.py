@@ -17,10 +17,11 @@ import campaign
 import campaign.wiring.wire as campaign_wire
 import linkpolicy
 import linkpolicy.wiring.wire as linkpolicy_wire
+import reports
+import reports.wiring.wire as reports_wire
 from bootstrap.config import Config
 from campaign.adapters.gateways.target_checker import LinkPolicyTargetChecker
 from lifecycle import Closeable
-from reports import ReportsService
 
 
 class CleanupStack:
@@ -46,7 +47,7 @@ class CleanupStack:
 
 
 class App:
-    """The built graph. Holds the public Clients + the reports read-model, and owns
+    """The built graph. Holds the three contexts' public Clients, and owns
     teardown via ``close()`` (idempotent — the single lifecycle method the template
     mandates; graceful-shutdown ordering is the host's fill-in)."""
 
@@ -54,12 +55,12 @@ class App:
         self,
         campaign_client: campaign.Client,
         policy_client: linkpolicy.Client,
-        reports: ReportsService,
+        reports_client: reports.Client,
         stack: CleanupStack,
     ) -> None:
         self.campaign = campaign_client
         self.linkpolicy = policy_client
-        self.reports = reports
+        self.reports = reports_client
         self._stack = stack
         self._closed = False
 
@@ -82,8 +83,10 @@ def new(cfg: Config) -> App:
         campaign_client, campaign_closeable = campaign_wire.build(cfg.campaign, checker)
         stack.push(campaign_closeable)
 
-        reports = ReportsService(campaign_client, policy_client)
-        return App(campaign_client, policy_client, reports, stack)
+        # reports sits above both peers: built last, with their Clients injected.
+        reports_client, reports_closeable = reports_wire.build(cfg.reports, campaign_client, policy_client)
+        stack.push(reports_closeable)
+        return App(campaign_client, policy_client, reports_client, stack)
     except Exception:
         stack.close_all()  # partial-construction cleanup: close what was built
         raise

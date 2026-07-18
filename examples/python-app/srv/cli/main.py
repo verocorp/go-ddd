@@ -16,12 +16,14 @@ from bootstrap.config import Config
 from campaign.client import CreateLinkRequest
 from campaign.wiring.config import Config as CampaignConfig
 from linkpolicy.wiring.config import Config as LinkPolicyConfig
+from reports.wiring.config import Config as ReportsConfig
 
 
 def run(argv: list[str]) -> int:
     cfg = Config(
         campaign=CampaignConfig(storage=os.getenv("CAMPAIGN_STORAGE") or ""),
         linkpolicy=LinkPolicyConfig(storage=os.getenv("LINKPOLICY_STORAGE") or ""),
+        reports=ReportsConfig(),
     )
     app = new(cfg)  # graph built once; validates the coordinates fail-fast
     try:
