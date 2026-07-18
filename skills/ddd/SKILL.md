@@ -2,7 +2,7 @@
 name: ddd
 description: Domain-driven design entry point. Load whenever creating or modifying domain types OR the code around them — adding a field to a struct/class, creating a new type, modeling a new concept, writing a constructor, adding validation, comparing domain objects in tests, deciding between a value object/entity/aggregate, AND whenever writing a handler/endpoint, a use-case or application/domain service, or persistence/repository code (where to put business logic, how to load or save an aggregate, keeping domain math out of controllers), AND whenever wiring an application together — writing an entry point / `main` / composition root, or exposing a component behind a public interface (a `Client` + DTOs), AND whenever reasoning about strategic design — subdomains, bounded contexts, or ubiquitous language (where to draw a model boundary, whether two areas are one model or two, what to name the domain language). Routes the task to the right concept and construction guide.
 skill-version: 7
-source: https://github.com/verocorp/go-ddd (skills/ddd/)
+source: https://github.com/verocorp/tesser-build (skills/ddd/)
 ---
 
 # DDD — Domain Modeling Entry Point
@@ -119,4 +119,4 @@ Route on the task:
    semantics, and every invariant get tests when the type is born, not later.
 
 Humans learning the why: see `docs/start-here.md` and `docs/faq.md` in the
-source repo (or https://github.com/verocorp/go-ddd).
+source repo (or https://github.com/verocorp/tesser-build).

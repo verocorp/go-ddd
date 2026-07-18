@@ -10,7 +10,7 @@
 // See ../../adversary_provenance.md.
 package webhookpayload
 
-import "github.com/verocorp/go-ddd/rationale/changeability/nooutward/emit"
+import "github.com/verocorp/tesser-build/rationale/changeability/nooutward/emit"
 
 type ManeuverWebhook struct {
 	ID           string

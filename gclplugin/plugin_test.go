@@ -5,7 +5,7 @@ import (
 
 	"github.com/golangci/plugin-module-register/register"
 
-	"github.com/verocorp/go-ddd/internal/analyzers"
+	"github.com/verocorp/tesser-build/internal/analyzers"
 )
 
 // TestBuildAnalyzers_MatchesRegistry locks the plugin to the single analyzer

@@ -56,8 +56,8 @@ func TestCustomGCL_BundlesAndRuns(t *testing.T) {
 		"name: custom-gcl\n" +
 		"destination: " + work + "\n" +
 		"plugins:\n" +
-		"  - module: github.com/verocorp/go-ddd\n" +
-		"    import: github.com/verocorp/go-ddd/gclplugin\n" +
+		"  - module: github.com/verocorp/tesser-build\n" +
+		"    import: github.com/verocorp/tesser-build/gclplugin\n" +
 		"    path: " + moduleRoot + "\n"
 	if err := os.WriteFile(filepath.Join(work, ".custom-gcl.yml"), []byte(customCfg), 0o644); err != nil {
 		t.Fatal(err)

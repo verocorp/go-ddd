@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/multichecker"
 
-	"github.com/verocorp/go-ddd/internal/analyzers"
+	"github.com/verocorp/tesser-build/internal/analyzers"
 )
 
 func main() {

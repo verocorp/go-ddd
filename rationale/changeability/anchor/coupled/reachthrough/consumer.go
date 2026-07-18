@@ -10,8 +10,8 @@ package reachthrough
 import (
 	"context"
 
-	"github.com/verocorp/go-ddd/rationale/changeability/anchor/backend"
-	"github.com/verocorp/go-ddd/rationale/changeability/anchor/orders"
+	"github.com/verocorp/tesser-build/rationale/changeability/anchor/backend"
+	"github.com/verocorp/tesser-build/rationale/changeability/anchor/orders"
 )
 
 // Snapshot places an order through the public client, then reaches through to

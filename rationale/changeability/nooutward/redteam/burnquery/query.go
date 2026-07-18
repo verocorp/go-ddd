@@ -13,8 +13,8 @@ package burnquery
 import (
 	"context"
 
-	"github.com/verocorp/go-ddd/rationale/changeability/nooutward/app"
-	"github.com/verocorp/go-ddd/rationale/changeability/nooutward/pub"
+	"github.com/verocorp/tesser-build/rationale/changeability/nooutward/app"
+	"github.com/verocorp/tesser-build/rationale/changeability/nooutward/pub"
 )
 
 func BurnSeconds(ctx context.Context, maneuverID string) (int64, error) {

@@ -8,7 +8,7 @@
 package exportrow
 
 import (
-	"github.com/verocorp/go-ddd/rationale/changeability/anchor/backend"
+	"github.com/verocorp/tesser-build/rationale/changeability/anchor/backend"
 )
 
 // OrderExport is a consumer-owned API type that accidentally bakes backend A's

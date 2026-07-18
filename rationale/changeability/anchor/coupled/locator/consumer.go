@@ -8,7 +8,7 @@
 package locator
 
 import (
-	"github.com/verocorp/go-ddd/rationale/changeability/anchor/backend"
+	"github.com/verocorp/tesser-build/rationale/changeability/anchor/backend"
 )
 
 // RawOrderLocator is a consumer-level global accessor used by legacy jobs that

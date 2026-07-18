@@ -13,8 +13,8 @@ version: v2.12.2
 name: custom-gcl
 destination: /Users/me/go/bin
 plugins:
-  - module: github.com/verocorp/go-ddd
-    import: github.com/verocorp/go-ddd/gclplugin
+  - module: github.com/verocorp/tesser-build
+    import: github.com/verocorp/tesser-build/gclplugin
     version: v0.1.0
     # Unpublished / dogfooding against a local go-ddd checkout? Drop `version:`
     # above and use a local path instead:

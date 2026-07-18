@@ -17,7 +17,7 @@
   //      the same trigger with none of the custom-binary setup.
   //
   // Requires the tool pinned in your go.mod:
-  //   go get -tool github.com/verocorp/go-ddd/cmd/ddd-vet@latest
+  //   go get -tool github.com/verocorp/tesser-build/cmd/ddd-vet@latest
   // Not adopted yet (dogfooding from a sibling go-ddd checkout)? Use the
   // from-source command variant noted below instead.
   "version": "2.0.0",

@@ -12,7 +12,7 @@ package burnsort
 import (
 	"sort"
 
-	"github.com/verocorp/go-ddd/rationale/changeability/nooutward/emit"
+	"github.com/verocorp/tesser-build/rationale/changeability/nooutward/emit"
 )
 
 func ByBurnSeconds(maneuvers []emit.Maneuver) {
