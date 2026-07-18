@@ -78,6 +78,10 @@ pytest -q
 `tests/test_enforcement.py` checks (env calls only in `srv/*/main`; only the edge
 exits; no import-time side effects) and `tests/test_direction.py` (linkpolicy never
 imports campaign) are **executable spec** — they fail on the violations the template
-exists to prevent, and a clone inherits them by copying the tree. The general
+exists to prevent, and a clone inherits them by copying the tree. Contexts are
+**discovered, not enumerated** (`tests/discovery.py`: any root package exposing a
+`Client`), so a new context is checked by construction; the totality guard fails
+on any root package that classifies as neither an app-level piece nor a
+`Client`-bearing context, so a context that forgot its `Client` cannot hide. The general
 `ddd-vet` analyzer that generalizes these checks across repos is a separate
 follow-on.

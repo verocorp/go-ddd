@@ -1,8 +1,10 @@
-"""Shape properties: the required roles are present per context (adapters are
-optional — OQ5: a context that reaches peers only through injected Clients needs
-none); the public seam is Client + primitive DTOs at the top level; each
-context's config lives in its ``wiring`` (impl), not on the public top level;
-the handler translates wire<->Client DTOs.
+"""Shape properties, applied to DISCOVERED contexts (see ``tests/discovery.py``
+— a new context is checked by construction, no list to remember): the required
+roles are present per context (adapters are optional — OQ5: a context that
+reaches peers only through injected Clients needs none); the public seam is
+Client + primitive DTOs at the top level; each context's config lives in its
+``wiring`` (impl), not on the public top level; the handler translates
+wire<->Client DTOs.
 """
 
 from __future__ import annotations
@@ -18,12 +20,13 @@ from campaign.client import CreateLinkResponse
 from campaign.wiring.config import Config as CampaignConfig
 from campaign.wiring.wire import build as build_campaign
 from reports.client import LinkVerdictView
+from tests.discovery import discovered_contexts
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def test_required_roles_present_per_context() -> None:
-    for ctx in ("campaign", "linkpolicy", "reports"):
+    for ctx in discovered_contexts():
         for role in ("domain", "application", "wiring"):
             assert (ROOT / ctx / role).is_dir(), f"{ctx}/{role} missing"
     # campaign and linkpolicy carry adapters (handlers/gateways); reports needs
@@ -46,7 +49,7 @@ def test_public_seam_is_client_plus_dtos_at_top_level() -> None:
 
 
 def test_config_lives_in_wiring_not_on_public_top_level() -> None:
-    for ctx in ("campaign", "linkpolicy", "reports"):
+    for ctx in discovered_contexts():
         assert (ROOT / ctx / "wiring" / "config.py").is_file()
         assert not (ROOT / ctx / "config.py").exists(), f"{ctx} config leaked to the public top level"
 

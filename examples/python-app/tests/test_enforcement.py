@@ -18,6 +18,8 @@ from __future__ import annotations
 import ast
 import pathlib
 
+from tests.discovery import discovered_contexts
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
@@ -113,8 +115,10 @@ def test_only_the_edge_exits() -> None:
 
 
 def test_no_import_time_side_effects_in_contexts_or_bootstrap() -> None:
+    # Contexts are DISCOVERED (tests/discovery.py), not enumerated — a new
+    # context is covered by construction.
     offenders: dict[str, list[int]] = {}
-    for pkg in ("campaign", "linkpolicy", "reports", "bootstrap"):
+    for pkg in (*discovered_contexts(), "bootstrap"):
         for path in (ROOT / pkg).rglob("*.py"):
             lines = _import_time_side_effects(_parse(path))
             if lines:
