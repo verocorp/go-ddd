@@ -342,7 +342,7 @@ func (r *InMemoryOrderRepo) Load(ctx context.Context, id OrderID) (Order, error)
 
 ## The composition root
 
-The public interface + the wiring site (`composition-root.md`). The `Client`
+The public interface + the wiring site (`public-interface.md`, `bootstrap.md`). The `Client`
 interface and its DTOs live in a public package; a struct in the impl **embeds
 the application service to satisfy it**; a hand-wired `main` chooses the concrete
 implementations and injects the `Client` into the handler.
@@ -449,7 +449,7 @@ func NewHandler(client orders.Client) *Handler { return &Handler{client: client}
 
 - **Only `main` imports `ordersimpl`.** Nothing else selects the concrete. That
   boundary is a *convention* here; Go's `internal/` makes it compiler-enforced —
-  a later addition (`composition-root.md`).
+  a later addition (`bootstrap.md`).
 - **Wire (`github.com/google/wire`)** is one realization of this hand-wiring:
   codegen that builds the same graph from a provider set, for when the `main`
   grows unwieldy. Named once; the hand-wired form above is what this skill

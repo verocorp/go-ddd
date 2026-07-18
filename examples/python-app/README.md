@@ -20,9 +20,11 @@ into every service cloned from it, so the example **enforces itself** (see below
    — the honest error propagates. campaign owns the `TargetChecker` port; the
    adapter over `linkpolicy.Client` lives in `campaign/adapters/gateways`, so the
    dependency runs one way and `linkpolicy` stays ignorant of `campaign`.
-<!-- Cross-context read placement is provisional doctrine (design 2026-07-18,
-     EXTRA-CARE zone): revisit deliberately during map.md drafting (Wave 2)
-     before it hardens into taught doctrine. -->
+<!-- Cross-context read placement was ratified as taught doctrine during
+     map.md drafting (Wave 2, 2026-07-18): see
+     skills/tesser-build/map.md#how-contexts-connect, incl. the guardrail that a
+     read belonging to ONE peer stays in that peer — the new-context move is
+     only for composition that belongs to neither. -->
 2. **Moment 2 — a cross-context READ.** "links by policy verdict" needs the link
    (campaign) + the verdict (linkpolicy). It belongs to neither peer, so it is
    **its own (small) bounded context** — `reports` — sitting ABOVE both and

@@ -327,7 +327,7 @@ class InMemoryOrderRepo:                   # satisfies the Protocol structurally
 
 ## The composition root
 
-The public interface + the wiring site (`composition-root.md`). The `Client`
+The public interface + the wiring site (`public-interface.md`, `bootstrap.md`). The `Client`
 `Protocol` and its DTOs live in a public package; the application service
 **satisfies the Protocol structurally** (no inheritance, no adapter code); a
 hand-wired entry point chooses the concrete implementations and injects the
@@ -432,7 +432,7 @@ def wire(addr: tuple[str, int]) -> ThreadingHTTPServer:
 - **Only the composition root imports `ordersimpl`.** Nothing else selects the
   concrete implementation. That boundary is a *convention* here; a
   package-private layout or an `__all__`/naming discipline is the Python analog
-  of Go's compiler-enforced `internal/` (`composition-root.md`).
+  of Go's compiler-enforced `internal/` (`bootstrap.md`).
 - **No `context.Context`.** A plain synchronous Python service has no such
   idiom; thread a unit-of-work/session where your codebase already does (see the
   application-services note above).

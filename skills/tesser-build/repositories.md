@@ -1,8 +1,13 @@
-# Repository
+# Gateway: repository
 
 A repository is the **persistence boundary** for an aggregate: it maps the
 aggregate to and from storage and hides how that storage works (Evans,
-*Domain-Driven Design*, ch. 6; Vernon, *IDDD*, ch. 12). It has exactly two jobs
+*Domain-Driven Design*, ch. 6; Vernon, *IDDD*, ch. 12). In the anatomy it is a
+**gateway type** — an outbound adapter behind a port the context owns
+(`map.md#adapters`); its sibling is the cross-context gateway
+(`gateway-cross-context.md`), which reaches a peer context instead of storage.
+The interface (the port) is defined beside its consumer; the concrete
+implementations live in the context's `adapters/gateways`. It has exactly two jobs
 — **save** an aggregate (decompose it into rows/documents) and **retrieve** one
 (reconstruct it through its constructor). It holds **no business logic**: the
 domain already enforced every invariant before the aggregate reached the repo.
@@ -22,6 +27,8 @@ deciding any domain rule?* Yes → repository.
   legitimate *read concern*, and this file names it below, but it is not the
   aggregate write path and must not grow domain logic.
 - An **application service** — it *calls* the repository; it is not one.
+- A **cross-context gateway** (`gateway-cross-context.md`) — the same
+  port+adapter shape, but it reaches a peer context's `Client`, not storage.
 
 ## Rules
 
