@@ -5,12 +5,14 @@ not copied into consumer repos. The design it implements is the 2026-07-11
 approved design (office-hours + eng review); the rules below are the ones a
 future author must not silently break.
 
-## The two templates
+## The three templates
 
-Every **concept doc** (`value-objects.md`, `entities.md`, `aggregates.md`,
-`application-services.md`, `repositories.md`, `composition-root.md`, and the grouped
-`strategic-design.md`) follows one structure; every **mechanics doc** (`go.md`,
-`python.md`) follows another.
+Every **component doc** (`value-objects.md`, `entities.md`, `aggregates.md`,
+`application-services.md`, `public-interface.md`, `bootstrap.md`, the gateway
+family `repositories.md` / `gateway-cross-context.md`, `handlers.md`,
+`wiring.md`, `srv.md`, and the grouped `strategic-design.md`) follows one
+structure; every **mechanics doc** (`go.md`, `python.md`) follows another; the
+**map doc** (`map.md`) is a third shape of its own (below).
 The structures are designed for how an agent consumes them mid-task — routed in
 with a specific question, needing the answer near the top and the depth below —
 not for how the source material happened to be organized. Do not copy source
@@ -83,10 +85,44 @@ them), so a "domain objects" title is a category error once the seams land.
 Domain services, when deepened past their stub, get a `## Domain services`
 section between Aggregates and Application services.
 
+### Map-doc template (the third shape)
+
+`map.md` is a **procedure + anatomy**, not a concept: it teaches what the
+pieces of an application are, how they connect, and the gap-survey
+decomposition procedure — and routes each piece to its component doc. Sections:
+the anatomy (roles + app level) → the adapter taxonomy → how contexts connect
+(direction, call/read patterns, cycle resolution) → app vs library → the gap
+survey → the piece-to-doc routing table. **No per-scenario guides** — tricky
+cases that recur go to `docs/faq.md`, not new map sections. The
+adapters/handlers/gateways *umbrella* concepts live here (OQ1 ruling,
+2026-07-18), not in a taxonomy-only routing file.
+
+### Stub contract (eng review 2A)
+
+A component doc may ship before its content is materialized, but **every
+not-yet-materialized doc (or section) carries the disclaimer inside itself**:
+not yet materialized; note the gap, don't invent a convention; the verified
+impl is `examples/python-app/<path>` (naming the exact path). Disclaimers
+retire **per-file** as content lands — never wholesale at the SKILL.md level.
+A stub still names the rules that *are* settled and machine-verified (locked by
+an enforcement test in the verified impl); it stubs only what isn't.
+
 Each section is complete for its concept: full worked code, naming rules,
 error handling, test skeletons. Section headings are stable anchors — the
 resolver and the coverage matrix link to them; renaming a heading is a
 breaking change to both.
+
+## Delta-only norm sections (eng review 5A — review-enforced, not machine-checked)
+
+Cross-cutting norms (error handling, testing, comments) get a general layer
+plus **per-component deltas inline in component docs**. A delta must be
+delta-only: the review procedure is the **delete-the-inline-bit test** — delete
+the inline section; if no information was lost, it was a restatement, and
+restatements are banned (they are silent sites: the general layer changes and
+the copy silently diverges). This rule is **explicitly review-enforced** — no
+analyzer checks it; the reviewer runs the delete test on every inline norm
+section a change touches. This is the repo's honest-gap idiom: the enforcement
+gap is named, not hidden.
 
 ## Code-ownership rule (eng review 5A)
 

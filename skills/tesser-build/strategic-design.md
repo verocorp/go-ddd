@@ -101,7 +101,7 @@ bounded context.
 - **An aggregate** (`aggregates.md`) — a *consistency* boundary *inside* one context
   (a cluster that changes together under one root). A context contains many
   aggregates; it is not one.
-- **A component's public interface** (`composition-root.md`) — that is the *seam* a
+- **A component's public interface** (`public-interface.md`) — that is the *seam* a
   context exposes, not the context itself. (See "How it connects" below.)
 
 ### Rules
@@ -111,7 +111,7 @@ bounded context.
    the boundary — the overlap is a coincidence of the business, not a shared type.
 2. **Contexts talk through a deliberate contract, never internals.** Communication
    crosses the boundary as a **public `Client` interface + DTOs**
-   (`composition-root.md#the-public-interface`) — never by importing another context's
+   (`public-interface.md`) — never by importing another context's
    internal packages. The `Client` *is* the seam between contexts.
 3. **Dependencies point one way.** If A imports B and B imports A, they are not
    separate contexts — a cycle means they cannot evolve, deploy, or test
@@ -192,7 +192,7 @@ Do **not** split when:
 **No analyzer backs this.** A cross-context internal import, a bidirectional
 dependency, or a `Client` that leaks a domain object are caught by **review** — except
 that Go's `internal/` makes the *import* boundary compiler-enforced, and the
-`Client`-speaks-DTOs rule (`composition-root.md`) is where the leak shows up. The tells
+`Client`-speaks-DTOs rule (`public-interface.md`) is where the leak shows up. The tells
 a reviewer looks for:
 - an import of another context's `internal/` package — a boundary breach;
 - a cycle between two contexts — they are not really separate;
@@ -267,9 +267,9 @@ the first often marks a latent context boundary.
 
 ## How this connects to the tactical skill
 
-- The public **`Client` interface** (`composition-root.md#the-public-interface`) is the
+- The public **`Client` interface** (`public-interface.md`) is the
   seam **between** contexts — a component's contract is the boundary another context
-  reaches through. That footnote in `composition-root.md` is this section.
+  reaches through. The callers note in `public-interface.md` is this section.
 - An **aggregate** (`aggregates.md`) is a consistency boundary **within** one context,
   not a context boundary — a context holds many aggregates.
 - A **subdomain's tier** sets how much tactical modeling to invest: a **Core** context
