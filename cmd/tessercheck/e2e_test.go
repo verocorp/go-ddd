@@ -10,17 +10,17 @@ import (
 	"testing"
 )
 
-// findingRE matches one ddd-vet diagnostic line ("…/file.go:12:3: message").
+// findingRE matches one tessercheck diagnostic line ("…/file.go:12:3: message").
 var findingRE = regexp.MustCompile(`(?m)\.go:\d+:\d+:`)
 
 func countFindings(out string) int { return len(findingRE.FindAllString(out, -1)) }
 
-// TestE2E_ConsumerModule runs the real ddd-vet binary against a self-contained
+// TestE2E_ConsumerModule runs the real tessercheck binary against a self-contained
 // consumer module (testdata/consumer) that reproduces the findings the quanta
 // dogfood surfaced: a value object missing its canonical constructor
 // (voconstructor), a genuine .String()-comparison hazard (stringequality), and
 // the .String() shapes that must NOT fire (discarded call, literal compare,
-// stdlib .String()). It also exercises the .go-ddd.yaml exclude path and the
+// stdlib .String()). It also exercises the .tesser-build.yaml exclude path and the
 // fail-loud-on-malformed-config behavior end-to-end — coverage the per-analyzer
 // analysistest cannot give, because only a built binary against a real module
 // has a config file, a build step, and an exit code.
@@ -32,10 +32,10 @@ func TestE2E_ConsumerModule(t *testing.T) {
 		t.Skip("go toolchain not on PATH")
 	}
 
-	// Build ddd-vet from this package.
-	bin := filepath.Join(t.TempDir(), "ddd-vet")
+	// Build tessercheck from this package.
+	bin := filepath.Join(t.TempDir(), "tessercheck")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("building ddd-vet: %v\n%s", err, out)
+		t.Fatalf("building tessercheck: %v\n%s", err, out)
 	}
 
 	// Copy the fixture to a writable temp module so the test owns its config.
@@ -43,7 +43,7 @@ func TestE2E_ConsumerModule(t *testing.T) {
 	if err := os.CopyFS(moduleDir, os.DirFS("testdata/consumer")); err != nil {
 		t.Fatalf("copying fixture: %v", err)
 	}
-	cfgPath := filepath.Join(moduleDir, ".go-ddd.yaml")
+	cfgPath := filepath.Join(moduleDir, ".tesser-build.yaml")
 
 	run := func() (string, int) {
 		t.Helper()
@@ -53,7 +53,7 @@ func TestE2E_ConsumerModule(t *testing.T) {
 		if err != nil {
 			var ee *exec.ExitError
 			if !errors.As(err, &ee) {
-				t.Fatalf("running ddd-vet: %v\n%s", err, out)
+				t.Fatalf("running tessercheck: %v\n%s", err, out)
 			}
 			return string(out), ee.ExitCode()
 		}
@@ -87,7 +87,7 @@ func TestE2E_ConsumerModule(t *testing.T) {
 	}
 
 	// Run B — no config: Ledger is no longer excluded, so voconstructor flags it
-	// too. Proves the .go-ddd.yaml exclude is load-bearing, not decorative.
+	// too. Proves the .tesser-build.yaml exclude is load-bearing, not decorative.
 	if err := os.Remove(cfgPath); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestE2E_ConsumerModule(t *testing.T) {
 	if code == 0 {
 		t.Errorf("run C: malformed config should fail loud, got exit 0\n%s", out)
 	}
-	if !strings.Contains(out, "malformed .go-ddd.yaml") {
+	if !strings.Contains(out, "malformed .tesser-build.yaml") {
 		t.Errorf("run C: want a loud malformed-config error\n%s", out)
 	}
 }

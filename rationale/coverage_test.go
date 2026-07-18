@@ -11,7 +11,7 @@ import (
 )
 
 // TestCoverageMatrix_NoSilentGaps keeps coverage.md honest: every analyzer
-// ddd-vet ships (internal/analyzers.All) must appear in the matrix, and every
+// tessercheck ships (internal/analyzers.All) must appear in the matrix, and every
 // Test* the matrix names must exist in this package. It tolerates the ❌/⚠️ rows
 // by design (the rationale is broader than the enforcement, and some analyzers
 // enforce a rubric rule whose demo is still pending); it forbids a SILENT gap —
@@ -24,7 +24,7 @@ func TestCoverageMatrix_NoSilentGaps(t *testing.T) {
 	}
 	content := string(matrix)
 
-	// 1. Every analyzer ddd-vet ships is named in the matrix. Keyed off the
+	// 1. Every analyzer tessercheck ships is named in the matrix. Keyed off the
 	// analyzers.All registry — not the cmd/check* dirs — so the guard stays live
 	// after the standalone walkers are removed.
 	for _, a := range analyzers.All {

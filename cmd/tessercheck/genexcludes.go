@@ -11,12 +11,12 @@ import (
 	"github.com/verocorp/tesser-build/internal/voscan"
 )
 
-// maybeGenExcludes handles `ddd-vet -gen-excludes [packages...]`, the
+// maybeGenExcludes handles `tessercheck -gen-excludes [packages...]`, the
 // starter-config generator. It lives outside the go/analysis multichecker, so
 // main dispatches to it before handing off. It returns true when it handled the
 // invocation.
 //
-// It never clobbers an existing .go-ddd.yaml — that file is human-curated, and
+// It never clobbers an existing .tesser-build.yaml — that file is human-curated, and
 // silently overwriting it could drop a hand-added exclusion (re-introducing the
 // silent gap the toolkit exists to prevent). On first run it writes the file;
 // when one already exists it prints the regenerated content to stdout for the
@@ -36,7 +36,7 @@ func maybeGenExcludes(args []string) bool {
 	}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ddd-vet -gen-excludes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "tessercheck -gen-excludes: %v\n", err)
 		os.Exit(2)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
@@ -52,7 +52,7 @@ func maybeGenExcludes(args []string) bool {
 		return true
 	}
 	if err := os.WriteFile(voscan.ConfigName, []byte(out), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "ddd-vet -gen-excludes: writing %s: %v\n", voscan.ConfigName, err)
+		fmt.Fprintf(os.Stderr, "tessercheck -gen-excludes: writing %s: %v\n", voscan.ConfigName, err)
 		os.Exit(2)
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s with %d exclude(s); review before committing.\n", voscan.ConfigName, len(entries))

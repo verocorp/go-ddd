@@ -1,6 +1,6 @@
 # Human-ratified exclude list for the value-object heuristic (see
-# internal/voscan/config.go). ddd-vet walks up from each package to the nearest
-# .go-ddd.yaml, so this one scopes the excludes to the decision-2 (public-interface)
+# internal/voscan/config.go). tessercheck walks up from each package to the nearest
+# .tesser-build.yaml, so this one scopes the excludes to the decision-2 (public-interface)
 # changeability anchor.
 #
 #   - Order is the domain ENTITY: identity is by ID (see Order.Equal), not by

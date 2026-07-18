@@ -1,6 +1,6 @@
 # Human-ratified exclude list for the value-object heuristic (see
-# internal/voscan/config.go). ddd-vet walks up from each package to the nearest
-# .go-ddd.yaml, so this one scopes the excludes to the decision-3 fixture.
+# internal/voscan/config.go). tessercheck walks up from each package to the nearest
+# .tesser-build.yaml, so this one scopes the excludes to the decision-3 fixture.
 #
 # Maneuver matches the NewX(...) (X, error) constructor shape the analyzers read
 # as a value-object signal, but it is NOT a value object:

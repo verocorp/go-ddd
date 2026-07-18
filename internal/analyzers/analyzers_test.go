@@ -50,7 +50,7 @@ func TestEveryAnalyzerIsTested(t *testing.T) {
 
 // TestNoUnregisteredAnalyzer is the reverse guard: any package under passes/
 // that defines an Analyzer must be registered in All, so a built-but-forgotten
-// checker can't silently sit out of ddd-vet.
+// checker can't silently sit out of tessercheck.
 func TestNoUnregisteredAnalyzer(t *testing.T) {
 	root := repoRoot(t)
 	registered := map[string]bool{}

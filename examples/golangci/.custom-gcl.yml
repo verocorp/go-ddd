@@ -1,11 +1,11 @@
-# Build a golangci-lint binary with the ddd-vet analyzers bundled in. From the
+# Build a golangci-lint binary with the tessercheck analyzers bundled in. From the
 # directory holding this file:
 #
 #   golangci-lint custom        # requires golangci-lint v2
 #
 # produces a `custom-gcl` binary (set `name:`/`destination:` to place it on your
 # PATH, e.g. ~/go/bin). Point your editor's lint tool at that binary (see the
-# README "Editor integration" section) and it runs ddd-vet on save, natively.
+# README "Editor integration" section) and it runs tessercheck on save, natively.
 #
 # Pin `version:` to the golangci-lint release you run, and the plugin `version:`
 # to a published go-ddd tag — Renovate/Dependabot then bump them like any dep.

@@ -9,7 +9,7 @@ import (
 )
 
 // TestBuildAnalyzers_MatchesRegistry locks the plugin to the single analyzer
-// registry, so the golangci-lint binary and the standalone ddd-vet can never
+// registry, so the golangci-lint binary and the standalone tessercheck can never
 // expose different analyzer sets.
 func TestBuildAnalyzers_MatchesRegistry(t *testing.T) {
 	p, err := New(nil)
@@ -30,7 +30,7 @@ func TestBuildAnalyzers_MatchesRegistry(t *testing.T) {
 	}
 }
 
-// TestGetLoadMode_TypesInfo guards the correctness precondition: most ddd-vet
+// TestGetLoadMode_TypesInfo guards the correctness precondition: most tessercheck
 // analyzers are type-aware, so syntax-only would silently break them.
 func TestGetLoadMode_TypesInfo(t *testing.T) {
 	p, _ := New(nil)
