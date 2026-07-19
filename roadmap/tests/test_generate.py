@@ -165,6 +165,89 @@ def test_missing_status_marker_is_an_error(tmp_path: Path) -> None:
         generate_fixture(root, registry)
 
 
+def _add_rule_row(registry: Path, **overrides: object) -> None:
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    row: dict[str, object] = {
+        "key": "rule-direction",
+        "title": "Dependency direction",
+        "kind": "rule",
+        "taught_in": "skills/tesser-build/widget.md",
+        "enforced_by": "import-linter",
+    }
+    row.update(overrides)
+    data["rows"].append(row)
+    registry.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def test_rule_row_renders_in_second_table(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    _add_rule_row(registry)
+    out = generate_fixture(root, registry)
+    assert "## Pay-now rules" in out
+    assert "| Rule | Taught in | Enforced by | Status |" in out
+    assert (
+        "| Dependency direction | `skills/tesser-build/widget.md` | "
+        "import-linter | ✅ taught + enforced |" in out
+    )
+    # The rule row must NOT leak into the component table.
+    component_table = out.split("## Pay-now rules")[0]
+    assert "Dependency direction" not in component_table
+
+
+def test_no_rule_rows_means_no_second_table(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    assert "## Pay-now rules" not in generate_fixture(root, registry)
+
+
+def test_malformed_kind_is_a_named_file_line_error(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    _add_rule_row(registry, kind="rulez")
+    with pytest.raises(gen.RoadmapError, match=r"registry\.json:\d+.*malformed kind 'rulez'"):
+        generate_fixture(root, registry)
+
+
+def test_rule_row_rejects_component_keys(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    _add_rule_row(registry, py_example=["examples/fixture-app/widget"])
+    with pytest.raises(gen.RoadmapError, match="unknown keys.*py_example"):
+        generate_fixture(root, registry)
+
+
+def test_teeth_deleting_taught_in_target_flips_rule_status(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    _add_rule_row(registry)
+    assert "✅ taught + enforced" in generate_fixture(root, registry)
+
+    (root / "skills" / "tesser-build" / "widget.md").unlink()
+    after = generate_fixture(root, registry)
+    assert "🟡 enforced only" in after
+    assert "❌ `skills/tesser-build/widget.md`" in after
+
+
+def test_rule_row_without_enforcer_is_taught_only(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    data["rows"].append(
+        {
+            "key": "rule-direction",
+            "title": "Dependency direction",
+            "kind": "rule",
+            "taught_in": "skills/tesser-build/widget.md",
+        }
+    )
+    registry.write_text(json.dumps(data), encoding="utf-8")
+    assert "🟡 taught only" in generate_fixture(root, registry)
+
+
+def test_tb_cell_naming_a_rule_row_is_unknown_row(tmp_path: Path) -> None:
+    root, registry = make_fixture(tmp_path)
+    _add_rule_row(registry)
+    note = root / "examples" / "fixture-app" / "widget" / "note.md"
+    note.write_text("<!-- tb-cell: rule-direction checker ✅ -->\n", encoding="utf-8")
+    with pytest.raises(gen.RoadmapError, match="unknown row"):
+        generate_fixture(root, registry)
+
+
 def test_dead_path_check_flags_and_allows(tmp_path: Path) -> None:
     root, registry = make_fixture(tmp_path)
     readme = root / "README.md"

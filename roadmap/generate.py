@@ -42,9 +42,18 @@ SYMBOLS = (SYMBOL_DONE, SYMBOL_PARTIAL, SYMBOL_ABSENT, SYMBOL_NA)
 
 COLUMNS = ("py-example", "go-example", "skill", "checker", "rationale")
 
-ROW_KEYS_ALLOWED = {
+# Typed rows (eng review 5A): "component" rows render in the component ×
+# materialization matrix; "rule" rows (one per pay-now rule, added fused with
+# their enforcement) render in a second "Pay-now rules" table with
+# rule-appropriate columns, so an external enforcer (import-linter) renders
+# honestly and the component table's column semantics stay clean. Absent
+# ``kind`` means component — the pre-5A registry stays valid unchanged.
+ROW_KINDS = ("component", "rule")
+
+COMPONENT_ROW_KEYS_ALLOWED = {
     "key",
     "title",
+    "kind",
     "skill",
     "py_example",
     "go_example",
@@ -53,6 +62,13 @@ ROW_KEYS_ALLOWED = {
     "enforcement_tests",
     "rationale",
 }
+
+# Narrow v1 (5A): a rule row declares where the rule is taught (a repo path,
+# optionally with #anchor) and what enforces it (free text naming the
+# enforcer — external tools like import-linter live here). Listing check
+# codes on rule rows is the named later increment that lands with the fused
+# anatomy checks. tb-cell judgment overrides are component-table-only.
+RULE_ROW_KEYS_ALLOWED = {"key", "title", "kind", "taught_in", "enforced_by"}
 
 # The 2A stub-contract phrases every stub/partial doc must carry (machine check).
 DISCLAIMER_PHRASES = ("not yet materialized", "don't invent a convention")
@@ -215,6 +231,34 @@ def py_check_codes(root: Path) -> set[str]:
     return {c.code for c in CHECKS}
 
 
+def _row_location(path: Path, key: object) -> str:
+    """file:line of a row's ``"key"`` entry — the named-error anchor for
+    registry problems (a malformed ``kind`` must carry file:line, 6A-c)."""
+    if isinstance(key, str):
+        needle = f'"key": "{key}"'
+        try:
+            for lineno, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if needle in line:
+                    return f"{path}:{lineno}"
+        except OSError:
+            pass
+    return str(path)
+
+
+def row_kind(row: dict[str, object], path: Path) -> str:
+    """The row's declared kind; absent = component; anything else is a named
+    file:line error, never a silent default."""
+    kind = row.get("kind", "component")
+    if kind not in ROW_KINDS:
+        raise RoadmapError(
+            f"{_row_location(path, row.get('key'))}: row {row.get('key')!r} has "
+            f"malformed kind {kind!r} (allowed: {', '.join(ROW_KINDS)})"
+        )
+    return str(kind)
+
+
 def load_registry(path: Path) -> list[dict[str, object]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -227,12 +271,17 @@ def load_registry(path: Path) -> list[dict[str, object]]:
     for row in rows:
         if not isinstance(row, dict):
             raise RoadmapError(f"{path}: row is not an object: {row!r}")
-        unknown = set(row) - ROW_KEYS_ALLOWED
-        if unknown:
-            raise RoadmapError(f"{path}: row {row.get('key')!r} has unknown keys {sorted(unknown)}")
         key = row.get("key")
         if not isinstance(key, str) or not key:
             raise RoadmapError(f"{path}: row missing 'key': {row!r}")
+        kind = row_kind(row, path)
+        allowed = RULE_ROW_KEYS_ALLOWED if kind == "rule" else COMPONENT_ROW_KEYS_ALLOWED
+        unknown = set(row) - allowed
+        if unknown:
+            raise RoadmapError(
+                f"{_row_location(path, key)}: {kind} row {key!r} has unknown keys "
+                f"{sorted(unknown)} (allowed for kind {kind!r}: {sorted(allowed)})"
+            )
         if key in seen:
             raise RoadmapError(f"{path}: duplicate row key {key!r}")
         seen.add(key)
@@ -318,6 +367,39 @@ def checker_cell(
     return SYMBOL_ABSENT
 
 
+def rule_cells(root: Path, row: dict[str, object]) -> dict[str, str]:
+    """Cells for a ``kind: rule`` row — taught-in path (existence-checked),
+    declared enforcer, and a status derived from the two: a rule is ✅ only
+    when it is both taught at a live path and has a named enforcer."""
+    key = row.get("key")
+    taught = row.get("taught_in")
+    if taught is not None and not isinstance(taught, str):
+        raise RoadmapError(f"registry rule row {key!r}: taught_in must be a string path")
+    enforced = row.get("enforced_by")
+    if enforced is not None and (not isinstance(enforced, str) or not enforced.strip()):
+        raise RoadmapError(f"registry rule row {key!r}: enforced_by must be a non-empty string")
+
+    taught_ok = False
+    if taught is None:
+        taught_cell = SYMBOL_ABSENT
+    else:
+        target = taught.split("#", 1)[0].rstrip("/")
+        taught_ok = (root / target).exists()
+        taught_cell = f"`{taught}`" if taught_ok else cell(SYMBOL_ABSENT, f"`{taught}`")
+
+    enforced_cell = enforced if enforced is not None else SYMBOL_ABSENT
+
+    if taught_ok and enforced is not None:
+        status = cell(SYMBOL_DONE, "taught + enforced")
+    elif taught_ok:
+        status = cell(SYMBOL_PARTIAL, "taught only")
+    elif enforced is not None:
+        status = cell(SYMBOL_PARTIAL, "enforced only")
+    else:
+        status = SYMBOL_ABSENT
+    return {"taught-in": taught_cell, "enforced-by": enforced_cell, "status": status}
+
+
 def rationale_cell(root: Path, row: dict[str, object]) -> str:
     globs = _str_list(row, "rationale")
     if globs is None:
@@ -364,7 +446,12 @@ def dead_path_check(root: Path, markers: Markers) -> list[str]:
     return problems
 
 
-def render(rows: list[dict[str, object]], cells_by_row: dict[str, dict[str, str]]) -> str:
+def render(
+    rows: list[dict[str, object]],
+    cells_by_row: dict[str, dict[str, str]],
+    rule_rows: list[dict[str, object]],
+    rule_cells_by_row: dict[str, dict[str, str]],
+) -> str:
     lines = [
         "# Roadmap — component × materialization matrix",
         "",
@@ -385,12 +472,35 @@ def render(rows: list[dict[str, object]], cells_by_row: dict[str, dict[str, str]
             f"| {row['title']} | {c['py-example']} | {c['go-example']} | "
             f"{c['skill']} | {c['checker']} | {c['rationale']} |"
         )
+    if rule_rows:
+        lines += [
+            "",
+            "## Pay-now rules",
+            "",
+            "One row per pay-now rule (`kind: rule` in the registry) — the",
+            "rules whose violations hide or whose fix is structural, enforced",
+            "from day one. External enforcers (e.g. import-linter) render",
+            "here honestly instead of bending the component columns.",
+            "",
+            "| Rule | Taught in | Enforced by | Status |",
+            "|---|---|---|---|",
+        ]
+        for row in rule_rows:
+            key = str(row["key"])
+            c = rule_cells_by_row[key]
+            lines.append(
+                f"| {row['title']} | {c['taught-in']} | {c['enforced-by']} | {c['status']} |"
+            )
     lines.append("")
     return "\n".join(lines)
 
 
 def generate(root: Path, registry_path: Path, analyzers_cmd: list[str]) -> str:
-    rows = load_registry(registry_path)
+    all_rows = load_registry(registry_path)
+    rows = [r for r in all_rows if row_kind(r, registry_path) == "component"]
+    rule_rows = [r for r in all_rows if row_kind(r, registry_path) == "rule"]
+    # tb-cell judgment overrides are component-table-only (narrow v1, 5A):
+    # a marker naming a rule row is an unknown-row error, not a silent no-op.
     row_keys = {str(r["key"]) for r in rows}
     markers = scan_markers(root, row_keys)
 
@@ -415,11 +525,13 @@ def generate(root: Path, registry_path: Path, analyzers_cmd: list[str]) -> str:
                 computed[col] = cell(ann.symbol, ann.text)
         cells_by_row[key] = computed
 
+    rule_cells_by_row = {str(r["key"]): rule_cells(root, r) for r in rule_rows}
+
     problems = dead_path_check(root, markers)
     if problems:
         raise RoadmapError("living surfaces reference nonexistent paths:\n" + "\n".join(problems))
 
-    return render(rows, cells_by_row)
+    return render(rows, cells_by_row, rule_rows, rule_cells_by_row)
 
 
 def main(argv: list[str] | None = None) -> int:
