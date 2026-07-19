@@ -15,13 +15,13 @@ Legend: ✅ done · 🟡 partial · ❌ absent · — intentionally n/a.
 | Domain services | ❌ | ❌ | 🟡 stub | ❌ | ❌ |
 | Application services | ✅ | ✅ | ✅ | ❌ | 🟡 D3 (no outward representation) won; D1 (app-SRP) pending |
 | Public interface | ✅ | 🟡 v3 single-main shape; settled anatomy's Go mirror (examples/app) pending | ✅ | 🟡 in-example | ✅ |
-| Handlers | ✅ | 🟡 v3 transport/ shape; adapters/handlers layout pending the Go mirror | 🟡 partial | 🟡 in-example | ❌ |
+| Handlers | ✅ | 🟡 v3 transport/ shape; adapters/handlers layout pending the Go mirror | ✅ | 🟡 in-example | ❌ |
 | Gateway: repository | ✅ | ✅ | ✅ | ❌ | ❌ D4 (repo speaks domain objects) pending |
 | Gateway: cross-context | ✅ | ❌ | 🟡 partial | 🟡 in-example | ❌ |
 | Gateway: vendor/ACL | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Context wiring | ✅ | ❌ | 🟡 stub | 🟡 in-example | ❌ |
-| bootstrap + app config + lifecycle | ✅ | ❌ | 🟡 partial | 🟡 in-example | ❌ |
-| srv hosts | ✅ | ❌ | 🟡 stub | 🟡 in-example | ❌ |
+| Context wiring | ✅ | ❌ | ✅ | 🟡 in-example | ❌ |
+| bootstrap + app config + lifecycle | ✅ | ❌ | ✅ | 🟡 in-example | ❌ |
+| srv hosts | ✅ | ❌ | ✅ | 🟡 in-example | ❌ |
 | The map | — | — | ✅ | — | ❌ |
 | Strategic design | — | — | ✅ | — | ❌ |
 | Norm: errors | ✅ | ❌ | ❌ | 🟡 in-example | ❌ the errorspy example matrix is the proof; no changeability arm |

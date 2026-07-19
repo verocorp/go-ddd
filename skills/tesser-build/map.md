@@ -145,12 +145,12 @@ two features talk"). Jobs are too many to catalog; decompose instead:
 | Domain service | `domain-services.md` | stub (deliberately shallow) |
 | Application service | `application-services.md` | full |
 | Public interface (`Client` + DTOs) | `public-interface.md` | full |
-| Handler | `handlers.md` | one-handler rule settled; rest stub |
+| Handler | `handlers.md` | full |
 | Gateway: repository | `repositories.md` | full |
 | Gateway: cross-context | `gateway-cross-context.md` | core rules settled; rest stub |
 | Gateway: vendor/ACL | — no file | gap: no verified impl anywhere |
-| Context wiring | `wiring.md` | stub |
-| bootstrap + app config + lifecycle | `bootstrap.md` | composition root full; config/lifecycle stub |
-| srv hosts | `srv.md` | stub |
+| Context wiring | `wiring.md` | full |
+| bootstrap + app config + lifecycle | `bootstrap.md` | full |
+| srv hosts | `srv.md` | full |
 | Strategic design (subdomains, contexts, language) | `strategic-design.md` | full |
-| Language mechanics | `go.md`, `python.md` | full for the domain + seam concepts |
+| Language mechanics | `go.md`, `python.md` | full for the domain + seam concepts; app-level anatomy mechanics (wiring/bootstrap/handlers/hosts) in `python.md` only — the Go mirror is pending |

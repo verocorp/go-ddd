@@ -75,6 +75,9 @@ services, repositories are not domain objects, but their mechanics live here).
 ## Aggregates
 ## Application services  ← seam sections follow the object sections
 ## Repositories
+## The composition root  ← public interface + wiring/bootstrap mechanics
+## Inbound handlers and hosts   ← the transport edge (python.md; go.md pending
+                                  the settled anatomy's Go mirror)
 ## The Spec pattern     ← cross-cutting construction pattern(s)
 ## Testing patterns
 ```
