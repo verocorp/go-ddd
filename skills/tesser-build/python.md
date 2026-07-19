@@ -19,7 +19,9 @@ them.
 > HTTP service) and the **`catalog`** package (the compound value object `Money`
 > backed by `decimal.Decimal`, and the collection value object `Labels`). The
 > whole tree passes `mypy --strict` and `pytest` in CI, the same bar the Go
-> mechanics meet. A few variants are stated below for completeness but shown for
+> mechanics meet. The app-level anatomy — `bootstrap` + per-context `wiring` +
+> `srv` hosts + inbound handlers — is backed the same way by
+> `examples/python-app/` (multi-context, self-enforcing tests). A few variants are stated below for completeness but shown for
 > shape only — the examples here are all *lifecycle* and *1:1*, so they do not
 > exercise a **fact** aggregate/entity that returns a new instance on change, an
 > explicit **reshaping** `Client`, or a hand-written `__eq__`/`__hash__`; each is
@@ -405,37 +407,162 @@ def new_client(svc: OrderService) -> Client:
     return _OrdersClient(svc)
 ```
 
-**The composition root — one hand-wired entry point that chooses and wires:**
+**The composition root — the settled app anatomy** (`bootstrap.md`,
+`wiring.md`; verified impl `examples/python-app/`). Each context owns a
+`wiring/` package (its spec-shaped `Config` + a `build` seam); the app-level
+`bootstrap` nests the configs and calls each context's `build` in dependency
+order, onto a cleanup stack:
 
 ```python
-# main.py — the only module that imports the concrete impl package.
-from http.server import ThreadingHTTPServer
-
-from ordersapp import OrderService
-from ordersimpl import PostgresOrderRepository, new_client
-from transport import make_handler
+# <context>/wiring/config.py — the context's OWN construction config
+@dataclass(frozen=True)
+class Config:
+    storage: str          # the resource coordinate; "memory" for in-process
 
 
-def wire(addr: tuple[str, int]) -> ThreadingHTTPServer:
-    repo = PostgresOrderRepository(...)   # the impl choice lives here …
-    svc = OrderService(repo)              # … inject the repo into the service
-    client = new_client(svc)              # compose behind the public Client
-    handler = make_handler(client)        # construct the handler, INJECT the Client
-    return ThreadingHTTPServer(addr, handler)
+# <context>/wiring/wire.py — coordinate-driven, fail-fast, uniform seam
+def repo_for(cfg: Config) -> tuple[LinkRepository, Closeable]:
+    if cfg.storage == "memory":
+        repo = InMemoryLinkRepository()
+        return repo, repo
+    if not cfg.storage:
+        raise invalid("missing_coordinate", "campaign storage coordinate is required")
+    raise invalid("unknown_backend", f"campaign storage {cfg.storage!r} not supported")
+
+
+def build(cfg: Config, checker: TargetChecker) -> tuple[Client, Closeable]:
+    repo, closeable = repo_for(cfg)
+    return CampaignService(repo, checker), closeable
+
+
+# bootstrap/config.py — the app Config nests the per-context ones
+@dataclass(frozen=True)
+class Config:
+    campaign: CampaignConfig
+    linkpolicy: LinkPolicyConfig
+
+
+# bootstrap/bootstrap.py — new(cfg): build ONCE, in dependency order
+def new(cfg: Config) -> App:
+    stack = CleanupStack()
+    try:
+        policy_client, policy_closeable = linkpolicy_wire.build(cfg.linkpolicy)
+        stack.push(policy_closeable)
+        checker = LinkPolicyTargetChecker(policy_client)   # cross-context adapter:
+        campaign_client, c_closeable = campaign_wire.build(cfg.campaign, checker)
+        stack.push(c_closeable)                            # built HERE, injected
+        return App(campaign_client, policy_client, stack)  # App owns close()
+    except Exception:
+        stack.close_all()      # partial construction unwinds — no leaked pools
+        raise
 ```
 
-- **`new_client` returns `Client`** (the Protocol), never the concrete service
-  or a domain type — the caller sees only the contract.
-- **The handler depends on the `Client` Protocol**, injected; it constructs
-  nothing. (Here the Client is captured by a handler-factory closure, since a
-  stdlib `BaseHTTPRequestHandler` is instantiated by the server, not by you.)
-- **Only the composition root imports `ordersimpl`.** Nothing else selects the
-  concrete implementation. That boundary is a *convention* here; a
-  package-private layout or an `__all__`/naming discipline is the Python analog
-  of Go's compiler-enforced `internal/` (`bootstrap.md`).
+- **`build` returns `(Client, Closeable)`** — the Protocol and a resource
+  handle, never the concrete service or a domain type. A context with no
+  resources returns a named no-op closeable; the seam stays uniform.
+- **Each context gets only its slice** (`cfg.campaign`), and cross-context
+  adapters are constructed in `new` and injected — only the root knows two
+  contexts at once.
+- **`App.close()` is idempotent** and pops the stack in reverse; a close that
+  raises must not orphan the rest (`CleanupStack.close_all` collects errors).
+- **Only bootstrap/wiring import the concretes.** That boundary is a
+  *convention* in Python; an `__all__`/naming discipline is the analog of
+  Go's compiler-enforced `internal/` (`bootstrap.md`).
 - **No `context.Context`.** A plain synchronous Python service has no such
-  idiom; thread a unit-of-work/session where your codebase already does (see the
-  application-services note above).
+  idiom; thread a unit-of-work/session where your codebase already does (see
+  the application-services note above).
+- **The degenerate case:** a single-context app can collapse this to one
+  hand-wired `main` that chooses the repo, builds the service, and composes
+  the `Client` (the `examples/python/` running arc does exactly that) — the
+  rules are unchanged: one place chooses, the contract crosses, nothing else
+  imports the concretes. Grow the full `bootstrap`/`wiring` shape when a
+  second context (or a second host) arrives.
+
+## Inbound handlers and hosts
+
+The two-layer transport split (`handlers.md`, `srv.md`; verified impl
+`examples/python-app/campaign/adapters/handlers/http.py` and
+`examples/python-app/srv/`). The per-context **handler** translates
+wire ↔ `Client` DTOs through one respond seam; the app-level **host** `main`
+is the env edge that builds the graph once and mounts the handlers.
+
+```python
+# <context>/adapters/handlers/http.py
+class BadRequest(Exception):
+    """transport-level failure (unparseable/wrong-shape request) -> 400"""
+
+
+@dataclass(frozen=True)
+class Response:
+    status: int
+    body: JSONObject
+
+
+class Handler:
+    def __init__(self, client: Client) -> None:
+        self._client = client                       # injected; never constructed
+
+    def create_link(self, raw: str) -> Response:
+        def run() -> Response:
+            body = _parse(raw)                      # wire guard, field by field
+            resp = self._client.create_link(
+                CreateLinkRequest(slug=_str(body.get("slug")),
+                                  target_url=_str(body.get("target_url")))
+            )
+            return Response(201, {"slug": resp.slug, "target_url": resp.target_url})
+
+        return self._respond(run)
+
+    def _respond(self, run: Callable[[], Response]) -> Response:
+        try:
+            return run()
+        except BadRequest as e:
+            return Response(400, _problem("malformed_request", str(e)))
+        except DomainError as e:
+            return Response(status_for(e.kind), _problem(e.code, e.message))
+        except InfraError:
+            return Response(503, _problem("unavailable", "a dependency is unavailable; please retry"))
+        except Exception:
+            return Response(500, _problem("internal", "unexpected error"))
+```
+
+- **One `Client` call per endpoint method**; the method translates in, calls,
+  translates out. `_parse`/`_str` raise `BadRequest` — the handler's own
+  transport guard, distinct from domain validation.
+- **`_respond` is the whole error table for the mechanism**: transport → 400,
+  domain kind → status through the one pure mapper (`status_for` over the
+  closed `Kind` set), infra → 503, unexpected → 500 with a generic body.
+- **`_problem`** renders the RFC 9457-shaped problem object (`type` from the
+  open `Code`, `detail`) — decided once at this seam.
+
+```python
+# srv/http/main.py — the host: env edge, build once, mount, serve, close
+def main() -> None:
+    cfg = Config(
+        campaign=CampaignConfig(storage=os.getenv("CAMPAIGN_STORAGE") or ""),
+        linkpolicy=LinkPolicyConfig(storage=os.getenv("LINKPOLICY_STORAGE") or ""),
+    )
+    app = new(cfg)                      # ONCE per process; validates fail-fast
+    host = os.getenv("HTTP_HOST") or ""             # the host's OWN launch config
+    port = int(os.getenv("HTTP_PORT") or "8080")
+    server = make_server((host, port), app)         # mounts the contexts' handlers
+    try:
+        server.serve_forever()
+    finally:
+        app.close()
+```
+
+- **The host populates `Config` literally at the edge** — a missing peer
+  coordinate stays empty (never defaulted here) and `bootstrap.new` fails
+  fast on it; the host's own launch knobs may default locally.
+- **`make_server` constructs each context's `Handler(app.<context>)` once**
+  from the single `App` — no per-request construction — and owns routing +
+  middleware for its mechanism.
+- **A CLI host** is the same shape minus the server: env → `Config`,
+  `new(cfg)` once, dispatch the command to one `Client` call, render, and
+  `close()` in `finally` (`examples/python-app/srv/cli/main.py`); with one
+  command the handler role is played inline in the dispatch
+  (`handlers.md#decisions-you-must-make`).
 
 ## The Spec pattern
 
