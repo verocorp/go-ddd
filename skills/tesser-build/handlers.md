@@ -1,18 +1,12 @@
 # Handler
 
-<!-- tb-status: partial -->
+<!-- tb-status: full -->
 
 An **inbound adapter**: it translates one delivery mechanism's wire format
 (HTTP, CLI, an event) to and from one context's public `Client`, and nothing
 else. Handlers are one of the two adapter types in the anatomy — inbound
 receives, outbound reaches out (`map.md#adapters`); the app-level host that
 mounts handlers and runs the server is a separate layer (`srv.md`).
-
-> **Status: partially materialized.** The one handler rule below is settled,
-> verified doctrine. The fuller treatment — wire-format translation patterns,
-> error → status mapping, per-mechanism shapes — is **not yet materialized**:
-> note the gap, don't invent a convention; the verified impl is
-> `examples/python-app/campaign/adapters/handlers/`.
 
 ## Is this what I'm building?
 
@@ -46,10 +40,103 @@ Yes → handler.
    *policy*, logging, recovery, rate limits are middleware at the host layer
    (`srv.md`); a handler that imports another context to do auth has leaked a
    host concern into a context adapter.
+4. **The wire shape is not the contract.** The JSON/flag/event shape is
+   translated to and from `Client` DTOs *inside the handler*, field by field —
+   never deserialized straight into a DTO or domain type. That translation is
+   the point of the layer: a wire rename touches the handler; the `Client`
+   and everything below it never hear about it.
+5. **Errors map to the wire at the edge, exhaustively.** One `respond` seam
+   catches: transport failures (unparseable/wrong-shape request) → 400 from
+   the handler's own guard; domain errors → status via the one pure
+   kind→status mapper (the closed `Kind` set, `errors.status_for`); infra
+   errors → 503; anything unexpected → 500 with no internals leaked. No
+   per-endpoint ad-hoc mapping — two endpoints must not disagree on what
+   `not_found` means.
+
+## Shape
+
+```
+<context>/adapters/handlers/
+  http.py          ← Handler(client), one method per endpoint, one respond seam
+
+class Handler:
+    def __init__(self, client: Client) -> None: ...     # injected, held as the contract
+    def create_link(self, raw: str) -> Response:        # wire in → DTO → Client → wire out
+        body = _parse(raw)                              # transport guard → 400
+        resp = self._client.create_link(CreateLinkRequest(slug=..., target_url=...))
+        return Response(201, {...})                     # DTO → wire, field by field
+```
+
+One `Client` call per endpoint; a `Response` is a status + body the host
+serializes. Construction mechanics:
+`python.md#inbound-handlers-and-hosts`; verified impl:
+`examples/python-app/campaign/adapters/handlers/http.py`.
+
+## Decisions you must make
+
+1. **One handler per mechanism, per context.** The HTTP handler and an event
+   consumer's handler are siblings under `adapters/handlers/` — same `Client`,
+   different wire. Don't fuse mechanisms into one class; their failure
+   vocabularies differ.
+2. **Does a CLI need a handler class?** A CLI command's arg-parse → one
+   `Client` call can live in the CLI host's command dispatch
+   (`srv.md`) when that is the whole translation — the handler *role* is
+   still being played (translate, call, render), just inline. Grow it into a
+   class when commands multiply. It obeys the same rules: no domain math, no
+   repository.
+3. **What is the problem-shape on the wire?** The verified impl renders
+   errors as a problem object (`type` + `detail`, RFC 9457-shaped) with the
+   domain error's open `Code` as the type — decided once at the `respond`
+   seam for the whole mechanism.
+
+## How the machine sees it
+
+Not machine-checked in this cut — no shipped analyzer targets handlers; the
+enforcement is review plus the domain-logic leakage signal list
+(`application-services.md#domain-logic-leakage-checks`). Review-side tells:
+- an import of a **repository or concrete service** in a handler module;
+- **domain arithmetic or a domain `for`-loop** between parse and `Client`
+  call;
+- a **DTO or domain type deserialized directly from the wire**
+  (`Model.parse_raw`, `json → dataclass(**body)`) — the translation layer
+  skipped;
+- **status codes chosen per-endpoint** instead of through the one mapper.
+
+## Tests you must write
+
+- **Wire → DTO translation:** a well-formed request produces exactly the
+  `Client` call's DTO (assert on a recording fake `Client`).
+- **The error table, one row per class:** malformed wire → 400; each domain
+  `Kind` → its mapped status through the shared mapper; infra → 503;
+  unexpected → 500 with a generic body. The mapper itself is tested once,
+  exhaustively, at the errors layer — the handler test locks that the seam
+  *uses* it.
+- **No leak on the unexpected path:** the 500 body carries no exception
+  text/stack.
+
+## Common mistakes
+
+- **The fat handler.** Validation-beyond-parsing, pricing math, a repository
+  call — domain logic living at the edge, invisible to the domain's tests.
+  Move it through the `Client`.
+- **Wire-as-contract.** Handing the parsed JSON dict (or the deserialized
+  request struct) down into the service — now the wire format *is* the API
+  and every wire change ripples inward.
+- **Ad-hoc statuses.** `except DomainError: return 400` — collapsing the
+  kind set at one endpoint; conflict and not-found become indistinguishable
+  on the wire. Always the shared mapper.
+- **Handler builds its dependencies.** Constructing the service or fetching
+  the `Client` from a registry — construction belongs to wiring/bootstrap;
+  the handler receives.
 
 ## Now build it
 
-Not yet materialized (see status note above). The verified impl to imitate:
-`examples/python-app/campaign/adapters/handlers/http.py` — a `Handler`
-constructed with `campaign.Client`, translating request paths/bodies to DTO
-requests and mapping domain error kinds to statuses at the edge.
+<!-- tb-allow-missing: examples/app -->
+
+- Python: `python.md#inbound-handlers-and-hosts` — the `Handler` class, the
+  transport guard, and the one `respond` seam, backed by
+  `examples/python-app/campaign/adapters/handlers/http.py`.
+- Go: not yet materialized — the settled anatomy's Go mirror
+  (`examples/app`) is pending; note the gap, don't invent a convention. The
+  same role split (handler translates, host mounts) applies; the v3
+  transport shape in `examples/ddd` predates the settled anatomy.

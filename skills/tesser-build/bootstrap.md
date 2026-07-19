@@ -1,6 +1,6 @@
 # Bootstrap — the composition root + app config + lifecycle
 
-<!-- tb-status: partial -->
+<!-- tb-status: full -->
 
 The **composition root** is the single place that wires the app: it
 **constructs** the concrete services and repositories, **composes** them to
@@ -82,13 +82,6 @@ verified impl: `examples/python-app/bootstrap/`.
 
 ## App config
 
-<!-- not yet materialized: the section below notes the shape; the full
-     convention (per-context Config nesting, spec-shaped app Config, narrow
-     per-provider slices) is not yet rendered as skill doctrine. Note the gap,
-     don't invent a convention; the verified impl is
-     `examples/python-app/bootstrap/config.py` (app level) and
-     `examples/python-app/*/wiring/config.py` (per context). -->
-
 `Config` is a **service-owned concrete struct, nested from per-context
 `Config`s** — each context owns its own `Config` in its `wiring`
 (`wiring.md`); the app `Config` composes them, and `bootstrap` slices
@@ -97,16 +90,51 @@ leaves, no constructor logic, no methods. The toolkit prescribes the nesting
 pattern and per-context ownership, never the fields — config contents are
 irreducibly per-service.
 
+The conventions the nesting carries:
+
+- **Each context sees only its own slice.** `bootstrap` passes
+  `cfg.campaign` to campaign's wiring — never the whole `Config`. A context
+  that receives the app config can grow a dependency on a sibling's
+  coordinate without anyone choosing that.
+- **No shared env-decoder and no `from_env` constructor on `Config`.** The
+  host populates the struct literally at the edge (`srv.md`); a `from_env`
+  method would make `Config` a second env authority and hide the deploy
+  surface inside the type.
+- **Validation lives in `new(cfg)`, not in `Config`.** The struct is dumb by
+  design; `bootstrap.new` (via each wiring's fail-fast) is where an absent
+  coordinate becomes a loud error. Two layers of validation drift apart.
+- **A context with nothing to configure still owns an (empty) `Config`** —
+  the nesting stays total, and a future coordinate lands in the context's
+  wiring instead of as a bootstrap special case (verified impl:
+  `examples/python-app/reports/wiring/config.py`).
+
 ## Lifecycle
 
-<!-- not yet materialized: minimal shape only. Note the gap, don't invent a
-     convention; the verified impl is `examples/python-app/lifecycle.py` and
-     the cleanup stack in `examples/python-app/bootstrap/bootstrap.py`. -->
+Deliberately minimal: the **only lifecycle contract the template mandates** is
+a `Closeable` shape (one `close()` method — `examples/python-app/lifecycle.py`)
+and an `App.close()` that tears the graph down. Health, readiness, graceful
+shutdown ordering, drain, and observability are the host's fill-in — the shape
+leaves room to do them *properly* without the template mandating them (see the
+ops-deferral notice in `SKILL.md`).
 
-Deliberately minimal: `App` has `close()`, and construction registers cleanup as
-it goes. The shape leaves room to do health / readiness / graceful shutdown /
-observability *properly* without the template mandating them — see the
-ops-deferral notice in `SKILL.md`.
+What the mandated minimum requires:
+
+- **A cleanup stack, pushed in construction order, closed in reverse.** As
+  `new(cfg)` builds each context it pushes that context's closeable; teardown
+  pops. Reverse order is the dependency order run backwards — a consumer
+  closes before what it consumes.
+- **A close that raises must not orphan the rest.** The stack attempts every
+  close and collects errors; one leaky pool cannot leak the others (verified
+  impl: `CleanupStack.close_all`, locked by
+  `examples/python-app/tests/test_cleanup.py`).
+- **Partial construction unwinds.** If a later context's build fails,
+  `new(cfg)` closes what it already built before the error propagates — a
+  failed boot must not leak connections (same test).
+- **`close()` is idempotent.** Hosts call it in `finally`; a double close is
+  a no-op, not a crash.
+- **Every wiring returns a closeable, even a no-op** (`wiring.md` rule 2) —
+  the stack's uniformity is what makes the four guarantees above hold by
+  construction rather than per-context vigilance.
 
 ## Decisions you must make
 
