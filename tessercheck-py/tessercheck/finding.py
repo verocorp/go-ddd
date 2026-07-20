@@ -104,6 +104,21 @@ CHECKS: tuple[CheckMeta, ...] = (
         "root blocks accidental equality (__eq__ = None / __hash__ = None)",
     ),
     CheckMeta(
+        "TB015",
+        "public-decompiler",
+        "a domain object never serializes itself: no public method returning a "
+        "spec, no emit-a-sink, no second or mismatched conversion dunder on a "
+        "leaf, and no conversion dunder at all on a compound/entity/aggregate "
+        "(skills/tesser-build/serialization.md rules 1, 3, 5)",
+    ),
+    CheckMeta(
+        "TB016",
+        "compound-raw-primitive",
+        "a compound value object holds child value objects, not bare primitives "
+        "— a multi-field VO keeping a raw primitive strands that component's "
+        "validation, behavior and canonical exit at the compound",
+    ),
+    CheckMeta(
         "TB020",
         "no-comments",
         "the comments norm v0: no code comments and no docstrings — machine "

@@ -154,15 +154,22 @@ belongs to the edge, recorded where its golden test lives.
 
 - **TB010** flags the leak's accessor half: public primitive fields and
   passthrough accessors on a VO.
-- The **public-decompiler check** (this wave) flags rule 1's method half: a
+- **TB015** (the public-decompiler check) flags rule 1's method half: a
   public method on a domain type returning a spec-classified type, an
   emit-a-sink method streaming private fields out, a leaf VO with a second
   or mismatched conversion dunder, and **any conversion dunder on a
-  compound/entity/aggregate** (rule 5's zero-dunder contract). Deeper
-  laundering (locals, helpers, dict-building) is declared out of contract —
-  review territory.
-- The **compound-raw-primitive check** (this wave) flags rule 5's internal
+  compound/entity/aggregate** (rule 5's zero-dunder contract), collection
+  value objects included. Deeper laundering (locals, helpers, dict-building)
+  is declared out of contract — review territory. Leaf-vs-structured is
+  decided mechanically: exactly one field, annotated with a bare backing
+  type, is a leaf; anything else — two or more fields, a field typed as
+  another domain object, a collection field — is structured.
+- **TB016** (the compound-raw-primitive check) flags rule 5's internal
   half: a multi-field VO holding bare primitives instead of child VOs.
+  Backing types the norm has not ruled on (`bool`, `complex`, `UUID`,
+  `Enum`) are out of contract rather than guessed at, and `date`/`datetime`
+  are a known under-reach both checks inherit from TB010's primitive set —
+  `TODOS.md` (representation-type coverage).
 - The **parts import boundary** (adapters consume parts, not domain types,
   outbound) is a named deferred check; until it ships, rule 7 is
   review-enforced. Honest gap, stated.

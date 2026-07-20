@@ -544,3 +544,167 @@ def test_tb003_hand_written_init_without_init_false_declaration_stays_flagged() 
         "        object.__setattr__(self, '_value', value)\n"
     )
     assert "TB003" in {f.code for f in check_source("c.py", src, is_test=False)}
+
+
+def _codes(src: str) -> set[str]:
+    return {f.code for f in check_source("t.py", src, is_test=False)}
+
+
+_LEAF = (
+    "from dataclasses import dataclass\n"
+    "@dataclass(frozen=True)\n"
+    "class Slug:\n"
+    "    _value: str\n"
+)
+
+
+def test_tb015_leaf_with_its_one_matching_exit_is_clean() -> None:
+    assert "TB015" not in _codes(_LEAF + "    def __str__(self) -> str:\n        return self._value\n")
+
+
+def test_tb015_leaf_with_no_exit_at_all_is_not_flagged() -> None:
+    # The check bans the wrong door, not the absence of one — a leaf with no
+    # canonical exit is a different (unruled) question.
+    assert "TB015" not in _codes(_LEAF)
+
+
+def test_tb015_flags_a_mismatched_exit_on_a_leaf() -> None:
+    src = _LEAF + "    def __int__(self) -> int:\n        return int(self._value)\n"
+    assert "TB015" in _codes(src)
+
+
+def test_tb015_flags_a_second_exit_on_a_leaf() -> None:
+    src = (
+        _LEAF
+        + "    def __str__(self) -> str:\n        return self._value\n"
+        + "    def __bytes__(self) -> bytes:\n        return self._value.encode()\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB015"]
+    assert len(findings) == 1
+    assert "__bytes__" in findings[0].message
+
+
+def test_tb015_decimal_and_datetime_leaves_exit_as_canonical_text() -> None:
+    for imp, typ in (("from decimal import Decimal", "Decimal"), ("from datetime import datetime", "datetime")):
+        src = (
+            f"{imp}\nfrom dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class V:\n"
+            f"    _value: {typ}\n"
+            "    def __str__(self) -> str:\n        return str(self._value)\n"
+        )
+        assert "TB015" not in _codes(src), typ
+
+
+def test_tb015_flags_any_dunder_on_a_collection_value_object() -> None:
+    # A collection VO is structured: Labels lost its joined __str__ under the
+    # 2026-07-20 zero-dunder ruling.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Label:\n"
+        "    _value: str\n"
+        "    def __str__(self) -> str:\n        return self._value\n"
+        "@dataclass(frozen=True)\n"
+        "class Labels:\n"
+        "    _values: tuple[Label, ...]\n"
+        "    def __str__(self) -> str:\n        return ','.join(str(v) for v in self._values)\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB015"]
+    assert len(findings) == 1
+    assert "Labels" in findings[0].message
+
+
+def test_tb015_private_spec_returning_helper_is_out_of_scope() -> None:
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class SlugSpec:\n"
+        "    value: str\n"
+        "@dataclass(frozen=True)\n"
+        "class Slug:\n"
+        "    _value: str\n"
+        "    def _to_spec(self) -> SlugSpec:\n        return SlugSpec(value=self._value)\n"
+    )
+    assert "TB015" not in _codes(src)
+
+
+def test_tb015_emit_requires_the_sink_to_be_a_parameter() -> None:
+    # A method calling a helper with its own state is not the emit-a-sink shape;
+    # the sink must be something the caller handed in.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slug:\n"
+        "    _value: str\n"
+        "    def register(self) -> None:\n        _LOG.append(self._value)\n"
+    )
+    assert "TB015" not in _codes(src)
+
+
+def test_tb015_is_suppressible_inline() -> None:
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slug:\n"
+        "    _value: str\n"
+        "    def __int__(self) -> int:  # tessercheck:ignore\n        return int(self._value)\n"
+    )
+    assert "TB015" not in _codes(src)
+
+
+def test_tb016_leaves_a_single_field_leaf_alone() -> None:
+    assert "TB016" not in _codes(_LEAF)
+
+
+def test_tb016_flags_every_bare_primitive_in_a_compound() -> None:
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Point:\n"
+        "    _x: float\n"
+        "    _y: float\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB016"]
+    assert len(findings) == 2
+
+
+def test_tb016_is_clean_when_components_are_value_objects() -> None:
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class X:\n"
+        "    _value: float\n"
+        "    def __float__(self) -> float:\n        return self._value\n"
+        "@dataclass(frozen=True)\n"
+        "class Point:\n"
+        "    _x: X\n"
+        "    _y: X\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+    )
+    assert "TB016" not in _codes(src)
+
+
+def test_tb016_does_not_fire_on_a_spec() -> None:
+    # A spec is the one sanctioned primitive bag — it exposes by design.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class MoneySpec:\n"
+        "    amount: str\n"
+        "    currency: str\n"
+    )
+    assert "TB016" not in _codes(src)
+
+
+def test_tb016_is_suppressible_inline() -> None:
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Point:\n"
+        "    _x: float  # tessercheck:ignore\n"
+        "    _y: float  # tessercheck:ignore\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+    )
+    assert "TB016" not in _codes(src)

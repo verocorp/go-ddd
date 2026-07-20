@@ -60,6 +60,66 @@ _MUTABLE_COLLECTION_BASES: frozenset[str] = frozenset(
 
 _SUPPRESS_MARKER = "# tessercheck:ignore"
 
+# The conversion protocol — the only sanctioned primitive doors out of a leaf
+# value object (serialization.md rule 3). A leaf defines exactly the one
+# matching its backing type; a structured type defines none (rule 5).
+_CONVERSION_DUNDERS: frozenset[str] = frozenset(
+    {"__str__", "__int__", "__float__", "__bytes__"}
+)
+
+# Backing type -> its canonical exit. The four native primitives map to their
+# own protocol; the representations *without* a conversion protocol (Decimal,
+# datetime) exit as canonical text under the pinned policies, so their exit is
+# __str__. Backing types outside this table (bool, complex, UUID, Enum, ...)
+# are out of contract: the norm has not ruled on them, so a leaf backed by one
+# is left alone rather than guessed at.
+_CANONICAL_EXIT: dict[str, str] = {
+    "str": "__str__",
+    "int": "__int__",
+    "float": "__float__",
+    "bytes": "__bytes__",
+    "Decimal": "__str__",
+    "datetime": "__str__",
+}
+
+
+def _fields(node: ast.ClassDef) -> list[ast.AnnAssign]:
+    """The class's annotated fields, in declaration order (ClassVars excluded —
+    they are not instance state)."""
+    return [
+        m
+        for m in node.body
+        if isinstance(m, ast.AnnAssign)
+        and isinstance(m.target, ast.Name)
+        and _annotation_base(m.annotation) != "ClassVar"
+    ]
+
+
+def _backing_primitive(node: ast.ClassDef) -> str | None:
+    """The backing primitive of a *leaf* value object, or ``None`` if the class
+    is structured.
+
+    A leaf is the mechanically crisp case: exactly one field, annotated with a
+    bare primitive name. Anything else — two or more fields, a field typed as
+    another domain object, a collection field — is structured, and structured
+    types have no primitive exit at all. This is the discriminator the norm's
+    "a leaf has exactly one matching conversion dunder; a structured type has
+    none" contract rests on.
+    """
+    fields = _fields(node)
+    if len(fields) != 1:
+        return None
+    base = _annotation_base(fields[0].annotation)
+    return base if base in _CANONICAL_EXIT else None
+
+
+def _defined_conversion_dunders(node: ast.ClassDef) -> list[ast.FunctionDef]:
+    return [
+        m
+        for m in node.body
+        if isinstance(m, ast.FunctionDef) and m.name in _CONVERSION_DUNDERS
+    ]
+
 
 def _contains_primitive(ann: ast.expr | None) -> bool:
     """True when any name anywhere in the annotation is a banned primitive —
@@ -99,8 +159,14 @@ def check_typed(
             # Equality is the defining property of every domain type — the check
             # the classifier was built to enable (see design §5).
             findings.extend(_check_equality(stmt, info, path, suppressed))
+        if info.stereotype in (Stereotype.VALUE_OBJECT, Stereotype.IDENTITY_OBJECT):
+            # The serialization norm governs every domain data type: how its
+            # primitives leave (TB015) and, for value objects, what it holds
+            # inside (TB016).
+            findings.extend(_check_public_decompiler(stmt, registry, path, suppressed))
         if info.stereotype is Stereotype.VALUE_OBJECT:
             findings.extend(_check_vo_exposure(stmt, path, suppressed))
+            findings.extend(_check_compound_raw_primitive(stmt, path, suppressed))
         elif info.stereotype is Stereotype.IDENTITY_OBJECT:
             findings.extend(_check_collection_leak(stmt, path, suppressed))
             findings.extend(_check_root_by_object(stmt, registry, path, suppressed))
@@ -349,6 +415,172 @@ def _check_construction(
                 f"{node.name!r} defines a from_spec factory; a structured domain "
                 "object constructs through its constructor instead — "
                 f"__init__(self, spec: {node.name}Spec) is the single path",
+            )
+        )
+    return findings
+
+
+def _check_public_decompiler(
+    node: ast.ClassDef,
+    registry: dict[str, ClassInfo],
+    path: str,
+    suppressed: "_Suppressed",
+) -> list[Finding]:
+    """TB015 — a domain object never serializes itself, and its primitives leave
+    through exactly one door per shape (serialization.md rules 1, 3 and 5).
+
+    Four shapes, one code:
+
+    1. **spec-return** — a public method whose return type is a spec-classified
+       class. That is the outbound decompose surface rule 1 bans; the spec is
+       inbound-only, and the sanctioned outbound walk is the application layer's
+       parts module.
+    2. **emit-a-sink** — a public method returning ``None`` that hands a private
+       field to one of its own parameters. Streaming the representation out is
+       the same leak wearing a callback.
+    3. **mismatched or second exit on a leaf** — a leaf defines exactly the one
+       conversion dunder matching its backing type. A second dunder is a second
+       door; a mismatched one (a str-backed value object with ``__int__``) is a
+       disguise.
+    4. **any conversion dunder on a structured type** — compounds, entities and
+       aggregates decompose structurally and have no primitive exit at all. The
+       zero-dunder contract has no debug carve-out (2026-07-20 ruling); ``repr``
+       is the debug surface.
+
+    Deeper laundering — building a dict through locals, delegating to a private
+    helper — is declared out of contract and stays review territory.
+    """
+    findings: list[Finding] = []
+
+    def flag(at: ast.AST, message: str) -> None:
+        line = getattr(at, "lineno", node.lineno)
+        col = getattr(at, "col_offset", node.col_offset)
+        if not suppressed(line):
+            findings.append(Finding(path, line, col + 1, "TB015", message))
+
+    for member in node.body:
+        if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if member.name.startswith("_"):
+            continue
+        returned = _annotation_base(member.returns) if member.returns is not None else None
+        target = registry.get(returned or "")
+        if target is not None and target.stereotype is Stereotype.SPEC:
+            flag(
+                member,
+                f"{node.name}.{member.name} returns the spec {returned!r} — a "
+                "public decompose-to-primitives surface. The spec is inbound-only; "
+                "the outbound walk belongs to the application layer's parts module",
+            )
+        elif returned in (None, "None") and _emits_private_field(member):
+            flag(
+                member,
+                f"{node.name}.{member.name} streams private fields into a sink — "
+                "a decompose surface wearing a callback. Edges consume the parts "
+                "record; the domain exports no shape",
+            )
+
+    dunders = _defined_conversion_dunders(node)
+    if not dunders:
+        return findings
+
+    backing = _backing_primitive(node)
+    if node.name in registry and registry[node.name].stereotype is Stereotype.IDENTITY_OBJECT:
+        backing = None
+
+    if backing is None:
+        for fn in dunders:
+            flag(
+                fn,
+                f"{node.name} is a structured domain object and defines {fn.name} — "
+                "compounds, entities and aggregates have no primitive exit at all. "
+                "They decompose structurally through value-object accessors; repr "
+                "is the debug surface",
+            )
+        return findings
+
+    expected = _CANONICAL_EXIT[backing]
+    for fn in dunders:
+        if fn.name != expected:
+            flag(
+                fn,
+                f"{node.name} is backed by {backing} and defines {fn.name}; its one "
+                f"canonical exit is {expected}. A second door lets two "
+                "representations of the same value diverge, and a mismatched one "
+                "is a disguise",
+            )
+    return findings
+
+
+def _emits_private_field(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True when ``fn`` passes one of ``self``'s private fields as an argument to
+    a call on one of its own parameters — the emit-a-sink shape.
+
+    Scoped deliberately tight: the sink must be a declared parameter, so an
+    ordinary method that happens to call a helper with its own state is not
+    swept in. Laundering through a local is out of contract.
+    """
+    params = {a.arg for a in fn.args.args[1:]} | {a.arg for a in fn.args.kwonlyargs}
+    if not params:
+        return False
+    for call in ast.walk(fn):
+        if not isinstance(call, ast.Call):
+            continue
+        receiver = call.func
+        if isinstance(receiver, ast.Attribute):
+            receiver = receiver.value
+        if not (isinstance(receiver, ast.Name) and receiver.id in params):
+            continue
+        for arg in call.args:
+            for sub in ast.walk(arg):
+                if (
+                    isinstance(sub, ast.Attribute)
+                    and sub.attr.startswith("_")
+                    and isinstance(sub.value, ast.Name)
+                    and sub.value.id == "self"
+                ):
+                    return True
+    return False
+
+
+def _check_compound_raw_primitive(
+    node: ast.ClassDef,
+    path: str,
+    suppressed: "_Suppressed",
+) -> list[Finding]:
+    """TB016 — a compound value object holds child value objects, not bare
+    primitives (serialization.md rule 5's internal half; the 2026-07-20 R1
+    ruling).
+
+    A value object with two or more fields is a compound: it names a concept
+    assembled from other concepts, and each of those concepts is itself a value
+    object (``Money{MoneyAmount, MoneyCurrency}``, not ``Money{Decimal, str}``).
+    Keeping a bare primitive in a compound strands its validation and behavior
+    at the compound — the quanta ``Decimal`` precedent — and leaves the component
+    with no canonical exit of its own.
+
+    A single-field value object is a leaf and is untouched: wrapping one
+    standardized primitive representation is exactly what a leaf is for.
+    """
+    fields = _fields(node)
+    if len(fields) < 2:
+        return []
+    findings: list[Finding] = []
+    for field in fields:
+        if not _contains_primitive(field.annotation):
+            continue
+        if suppressed(field.lineno):
+            continue
+        name = field.target.id if isinstance(field.target, ast.Name) else "?"
+        findings.append(
+            Finding(
+                path,
+                field.lineno,
+                field.col_offset + 1,
+                "TB016",
+                f"{node.name}.{name} is a bare primitive in a compound value "
+                "object; components are value objects — give it its own type so "
+                "its validation, behavior and canonical exit live with it",
             )
         )
     return findings
