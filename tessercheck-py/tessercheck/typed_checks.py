@@ -37,10 +37,11 @@ from tessercheck.finding import Finding
 # A predicate over 1-based line numbers: is a ``# tessercheck:ignore`` on that line?
 _Suppressed = Callable[[int], bool]
 
-# Base names that are raw primitives a value object must not expose as a public
-# field. A safe single-representation value (a currency code) may be exposed via
-# an accessor, and a multi-representation primitive (Decimal) is wrapped in its
-# own VO — but a *public primitive field* on a VO is always a representation leak.
+# Base names that are raw primitives a value object must not expose — neither
+# as a public field nor through a passthrough accessor (the 2026-07-19 ruling
+# closed the earlier "safe single-representation accessor" allowance: a
+# currency code is a Currency VO). A multi-representation primitive (Decimal)
+# is likewise wrapped in its own VO; ``__str__`` is the sole primitive exit.
 _PRIMITIVE_TYPES: frozenset[str] = frozenset(
     {"str", "int", "float", "bool", "bytes", "complex", "Decimal"}
 )
@@ -56,6 +57,24 @@ _MUTABLE_COLLECTION_BASES: frozenset[str] = frozenset(
 )
 
 _SUPPRESS_MARKER = "# tessercheck:ignore"
+
+
+def _contains_primitive(ann: ast.expr | None) -> bool:
+    """True when any name anywhere in the annotation is a banned primitive —
+    so ``str | None``, ``Optional[str]``, and a container of primitives all
+    count, not just a bare ``str`` (a union wrapper is not an escape hatch)."""
+    if ann is None:
+        return False
+    for sub in ast.walk(ann):
+        if isinstance(sub, ast.Name):
+            name: str | None = sub.id
+        elif isinstance(sub, ast.Attribute):
+            name = sub.attr
+        else:
+            continue
+        if name in _PRIMITIVE_TYPES:
+            return True
+    return False
 
 
 def check_typed(
@@ -96,10 +115,10 @@ def _check_vo_exposure(
     leak as ``x: str`` — the rename alone enforces nothing). Components are
     exposed as value objects; ``__str__`` is the sole primitive exit
     (display, and unwrapping at the service/repository edge)."""
-    field_types: dict[str, str | None] = {}
+    field_annotations: dict[str, ast.expr] = {}
     for member in node.body:
         if isinstance(member, ast.AnnAssign) and isinstance(member.target, ast.Name):
-            field_types[member.target.id] = _annotation_base(member.annotation)
+            field_annotations[member.target.id] = member.annotation
 
     findings: list[Finding] = []
     for member in node.body:
@@ -107,7 +126,7 @@ def _check_vo_exposure(
             field = member.target.id
             if field.startswith("_"):
                 continue
-            if _annotation_base(member.annotation) in _PRIMITIVE_TYPES:
+            if _contains_primitive(member.annotation):
                 if suppressed(member.lineno):
                     continue
                 findings.append(
@@ -122,15 +141,18 @@ def _check_vo_exposure(
                     )
                 )
         elif isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if member.name.startswith("__") and member.name.endswith("__"):
+            # Underscore-private helpers are internal plumbing, matching the
+            # field check's own underscore exemption above; the ban is on the
+            # PUBLIC read surface. Dunders (__str__ et al.) are the sanctioned
+            # exits.
+            if member.name.startswith("_"):
                 continue
             returned = _bare_self_field_returned(member)
             if returned is None:
                 continue
-            ann = member.returns
-            primitive = (
-                _annotation_base(ann) if ann is not None else None
-            ) in _PRIMITIVE_TYPES or field_types.get(returned) in _PRIMITIVE_TYPES
+            primitive = _contains_primitive(member.returns) or _contains_primitive(
+                field_annotations.get(returned)
+            )
             if not primitive or suppressed(member.lineno):
                 continue
             findings.append(
@@ -370,22 +392,39 @@ def _held_type_refs(node: ast.ClassDef) -> list[tuple[str, int, int]]:
 
 
 def _bare_self_field_returned(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """The attribute name if ``fn``'s body is exactly ``return self._x`` (past an
-    optional docstring); ``None`` if it wraps, copies, or does anything else.
+    """The attribute name if ``fn`` hands back ``self._x`` unchanged; ``None``
+    if it wraps, copies, computes, or does anything else.
 
-    ``return self._items`` leaks the backing store; ``return list(self._items)``
-    or ``return tuple(...)`` is a Call, not a bare Attribute, and is clean.
+    Two shapes match (past an optional docstring): the direct passthrough
+    ``return self._x``, and its one-alias disguise ``v = self._x; return v``.
+    ``return list(self._items)`` / ``return tuple(...)`` is a Call, not a bare
+    Attribute, and is clean. Deeper laundering (conditionals, multiple locals,
+    ``or`` fallbacks) is beyond this deliberately syntactic check's depth — the
+    norm's teeth are the direct shapes; the rest is code-review territory.
     """
     body = fn.body
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
         body = body[1:]  # skip a docstring
-    if len(body) != 1 or not isinstance(body[0], ast.Return):
+
+    def self_attr(value: ast.expr | None) -> str | None:
+        if (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "self"
+        ):
+            return value.attr
         return None
-    value = body[0].value
+
+    if len(body) == 1 and isinstance(body[0], ast.Return):
+        return self_attr(body[0].value)
     if (
-        isinstance(value, ast.Attribute)
-        and isinstance(value.value, ast.Name)
-        and value.value.id == "self"
+        len(body) == 2
+        and isinstance(body[0], ast.Assign)
+        and len(body[0].targets) == 1
+        and isinstance(body[0].targets[0], ast.Name)
+        and isinstance(body[1], ast.Return)
+        and isinstance(body[1].value, ast.Name)
+        and body[1].value.id == body[0].targets[0].id
     ):
-        return value.attr
+        return self_attr(body[0].value)
     return None

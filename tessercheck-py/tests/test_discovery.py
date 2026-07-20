@@ -316,6 +316,32 @@ def test_cli_exclude_declares_scratch_out_of_guard_and_checks(
     assert "spikes" not in captured.out and captured.err == ""
 
 
+def test_cli_exclude_prunes_root_level_only_not_nested_namesake(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--exclude prunes a *root-level* package by name; a nested directory
+    that happens to share the excluded name is a different path and stays
+    scanned (the checks, not just discovery, keep seeing it)."""
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    nested = tmp_path / "billing" / "spikes"
+    nested.mkdir()
+    (nested / "__init__.py").write_text("", encoding="utf-8")
+    (nested / "leaky.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Nested:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(["--app-root", str(tmp_path), "--exclude", "spikes"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "scratch.py" not in captured.out
+    assert "leaky.py" in captured.out
+
+
 def test_cli_exclude_requires_app_root(tmp_path: pathlib.Path) -> None:
     with pytest.raises(SystemExit) as exc:
         main(["--exclude", "spikes", str(tmp_path)])
@@ -334,3 +360,24 @@ def test_cli_exclude_overlapping_app_level_is_usage_error(
     with pytest.raises(SystemExit) as exc:
         main(["--app-root", str(tmp_path), "--app-level", "scripts", "--exclude", "scripts"])
     assert exc.value.code == 2
+
+
+def test_cli_exclude_wins_over_an_explicit_positional_path(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Passing the excluded package as an explicit path must not sneak it back
+    into the checked file set — the declared exclusion wins, with a stderr
+    note (cross-model finding: discovery and the checks disagreed)."""
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(
+        ["--app-root", str(tmp_path), "--exclude", "spikes", str(tmp_path / "spikes")]
+    )
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "scratch.py" not in captured.out
+    assert "skipped — inside a package declared with --exclude" in captured.err

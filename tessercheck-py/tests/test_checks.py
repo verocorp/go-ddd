@@ -91,6 +91,94 @@ def test_tb003_spec_init_exemption_covers_only_field_setattr() -> None:
     assert "__delattr__" in findings[0].message
 
 
+def test_tb003_spec_init_exemption_requires_enclosing_class() -> None:
+    # object.__setattr__ inside a bare module-level function named __init__
+    # (no enclosing class) can never be the sanctioned construction write.
+    # The preceding spec-init class must not leak its exemption into it either
+    # — proves the class-stack pop after Label actually clears the stack.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Label:\n"
+        "    _name: str\n"
+        "    def __init__(self, name: str) -> None:\n"
+        "        object.__setattr__(self, '_name', name)\n"
+        "\n"
+        "def __init__(self, value):\n"
+        "    object.__setattr__(self, '_value', value)\n"
+    )
+    findings = [f for f in check_source("m.py", src, is_test=False) if f.code == "TB003"]
+    assert len(findings) == 1
+    assert findings[0].line == 9
+
+
+def test_tb003_spec_init_exemption_rejects_malformed_setattr_calls() -> None:
+    # The exemption's shape check is strict: fewer than 2 args, a non-self
+    # target, and a non-string-constant field name are each still mutation,
+    # even inside __init__ of a frozen(init=False) class.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class X:\n"
+        "    _v: str\n"
+        "    def __init__(self, other: 'X', key: str, v: str) -> None:\n"
+        "        object.__setattr__(self)\n"
+        "        object.__setattr__(other, '_v', v)\n"
+        "        object.__setattr__(self, key, v)\n"
+        "        object.__setattr__(self, '_v', v)\n"
+    )
+    findings = [f for f in check_source("m.py", src, is_test=False) if f.code == "TB003"]
+    assert [f.line for f in findings] == [6, 7, 8]
+
+
+def test_tb003_spec_init_shape_detected_past_a_non_dataclass_decorator() -> None:
+    # _dataclass_init_false must skip a leading non-dataclass decorator to
+    # find the @dataclass(...) one, not bail out on the first mismatch.
+    src = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "def marker(cls):\n"
+        "    return cls\n"
+        "\n"
+        "@marker\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Y:\n"
+        "    _v: str\n"
+        "    def __init__(self, v: str) -> None:\n"
+        "        object.__setattr__(self, '_v', v)\n"
+    )
+    assert "TB003" not in {f.code for f in check_source("m.py", src, is_test=False)}
+
+
+def test_tb010_accessor_without_return_annotation_falls_back_to_field_type() -> None:
+    # An accessor with no ``->`` annotation is still caught via the backing
+    # field's own declared type, not waved through for lack of a type hint.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slot:\n"
+        "    _key: str\n"
+        "    def key(self):\n"
+        "        return self._key\n"
+    )
+    findings = [f for f in check_source("s.py", src, is_test=False) if f.code == "TB010"]
+    assert len(findings) == 1
+
+
+def test_tb010_accessor_suppression() -> None:
+    # The inline suppression marker exempts a flagged accessor, same as it
+    # does the public-field leak.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slot:\n"
+        "    _key: str\n"
+        "    def key(self) -> str:  # tessercheck:ignore\n"
+        "        return self._key\n"
+    )
+    assert "TB010" not in {f.code for f in check_source("s.py", src, is_test=False)}
+
+
 def test_tb010_computed_primitive_return_is_not_a_passthrough_accessor() -> None:
     # The accessor ban targets the bare passthrough (return self._x). A method
     # that computes is not handing the wrapped representation back.
@@ -276,3 +364,110 @@ def test_tb020_bare_string_statement_is_flagged_distinctly_from_docstring() -> N
     assert "bare string-literal" in bare[0].message
     doc = _tb020('"""module doc"""\n')
     assert "docstring" in doc[0].message
+
+
+def test_tb010_alias_passthrough_is_still_a_passthrough() -> None:
+    # `v = self._x; return v` is the direct passthrough in a one-line disguise;
+    # the adversarial pass showed it slipped the accessor ban entirely.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slot:\n"
+        "    _key: str\n"
+        "    def key(self) -> str:\n"
+        "        v = self._key\n"
+        "        return v\n"
+    )
+    findings = [f for f in check_source("s.py", src, is_test=False) if f.code == "TB010"]
+    assert len(findings) == 1
+
+
+def test_tb011_alias_passthrough_leaks_the_backing_collection() -> None:
+    # The alias peel applies to the shared helper, so the aggregate
+    # collection-leak check catches `v = self._items; return v` too.
+    src = (
+        "class Cart:\n"
+        "    def __init__(self, id: str) -> None:\n"
+        "        self._id = id\n"
+        "        self._items: list = []\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return isinstance(other, Cart) and other._id == self._id\n"
+        "    def __hash__(self) -> int:\n"
+        "        return hash(self._id)\n"
+        "    def items(self) -> list:\n"
+        "        v = self._items\n"
+        "        return v\n"
+    )
+    assert "TB011" in {f.code for f in check_source("c.py", src, is_test=False)}
+
+
+def test_tb010_private_helper_accessor_is_exempt() -> None:
+    # A `_`-prefixed helper is internal plumbing, matching the field check's
+    # underscore exemption — the ban is on the public read surface.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slug:\n"
+        "    _value: str\n"
+        "    def _raw(self) -> str:\n"
+        "        return self._value\n"
+    )
+    assert "TB010" not in {f.code for f in check_source("s.py", src, is_test=False)}
+
+
+def test_tb010_optional_primitive_is_not_an_escape_hatch() -> None:
+    # `str | None` and Optional[str] contain the banned primitive; a union
+    # wrapper must not wave the passthrough accessor (or a public field)
+    # through — the Codex structured pass caught this gap.
+    src = (
+        "from dataclasses import dataclass\n"
+        "from typing import Optional\n"
+        "@dataclass(frozen=True)\n"
+        "class Slot:\n"
+        "    _key: str | None\n"
+        "    _alt: Optional[str] = None\n"
+        "    def key(self) -> str | None:\n"
+        "        return self._key\n"
+        "    def alt(self):\n"
+        "        return self._alt\n"
+    )
+    findings = [f for f in check_source("s.py", src, is_test=False) if f.code == "TB010"]
+    assert len(findings) == 2
+
+
+def test_tb003_truthy_falsy_dataclass_flags_match_runtime_semantics() -> None:
+    # dataclasses treat frozen/init by truthiness at runtime: init=0 suppresses
+    # __init__ exactly like init=False, so the spec-init exemption honors it;
+    # frozen=1 freezes, so TB001 stays quiet.
+    spec_init = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=0)\n"
+        "class Name:\n"
+        "    _value: str\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+    )
+    assert "TB003" not in {f.code for f in check_source("n.py", spec_init, is_test=False)}
+    frozen_truthy = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=1)\n"
+        "class Row:\n"
+        "    x: int\n"
+    )
+    assert "TB001" not in {f.code for f in check_source("r.py", frozen_truthy, is_test=False)}
+
+
+def test_tb003_hand_written_init_without_init_false_declaration_stays_flagged() -> None:
+    # The exemption requires the DECLARED shape. A frozen dataclass with a
+    # hand-written __init__ but no init=False keyword is nudged to declare it —
+    # a dedicated lock so a future broadening of the exemption cannot slip
+    # past the set-only fixture assertion.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Code:\n"
+        "    _value: str\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+    )
+    assert "TB003" in {f.code for f in check_source("c.py", src, is_test=False)}

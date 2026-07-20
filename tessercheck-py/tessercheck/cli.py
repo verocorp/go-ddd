@@ -85,6 +85,29 @@ def _parse_codes(raw: str, parser: argparse.ArgumentParser, flag: str) -> frozen
     return wanted
 
 
+def _parse_names(raw: str, parser: argparse.ArgumentParser, flag: str) -> frozenset[str]:
+    """Split a comma-separated package-name list; an empty list is a loud
+    usage error, never a silently-empty declaration."""
+    names = frozenset(n.strip() for n in raw.split(",") if n.strip())
+    if not names:
+        parser.error(f"{flag}: no package names given")
+    return names
+
+
+def _under_excluded(
+    path: str, app_root: pathlib.Path, excluded: frozenset[str]
+) -> bool:
+    """True when ``path`` IS an excluded root-level package (or lies inside
+    one) — an explicit positional path does not override a declared
+    exclusion; the exclusion wins."""
+    resolved = pathlib.Path(path).resolve()
+    for name in excluded:
+        target = (app_root / name).resolve()
+        if resolved == target or target in resolved.parents:
+            return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -113,14 +136,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not app_root.is_dir():
             parser.error(f"--app-root: not a directory: {args.app_root}")
         if args.app_level is not None:
-            extra = frozenset(n.strip() for n in args.app_level.split(",") if n.strip())
-            if not extra:
-                parser.error("--app-level: no package names given")
-            app_level = APP_LEVEL_PACKAGES | extra
+            app_level = APP_LEVEL_PACKAGES | _parse_names(args.app_level, parser, "--app-level")
         if args.exclude is not None:
-            excluded = frozenset(n.strip() for n in args.exclude.split(",") if n.strip())
-            if not excluded:
-                parser.error("--exclude: no package names given")
+            excluded = _parse_names(args.exclude, parser, "--exclude")
             overlap = sorted(excluded & app_level)
             if overlap:
                 parser.error(
@@ -129,6 +147,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
     paths: list[str] = args.paths or ([str(app_root)] if app_root is not None else ["."])
+    if app_root is not None and excluded:
+        # The exclusion wins over an explicitly-passed path too — otherwise
+        # "--exclude spikes app/spikes" would scan the very package the user
+        # declared out, and discovery and the checks would disagree.
+        dropped = [p for p in paths if _under_excluded(p, app_root, excluded)]
+        paths = [p for p in paths if p not in dropped]
+        for p in dropped:
+            print(f"{p}: skipped — inside a package declared with --exclude", file=sys.stderr)
     findings, errors = run_paths(paths, exclude_top=excluded)
     if app_root is not None:
         errors.extend(
