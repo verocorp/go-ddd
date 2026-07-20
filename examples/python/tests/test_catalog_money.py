@@ -55,5 +55,8 @@ def test_add_rejects_currency_mismatch() -> None:
         _money("1.00", "USD").add(_money("1.00", "EUR"))
 
 
-def test_str_is_debug_form() -> None:
-    assert str(_money("1.5")) == "1.5 USD"
+def test_compound_has_no_conversion_dunders() -> None:
+    assert "__str__" not in Money.__dict__
+    assert "__int__" not in Money.__dict__
+    assert "__float__" not in Money.__dict__
+    assert "__bytes__" not in Money.__dict__

@@ -164,10 +164,12 @@ class Money:
         if self._currency != other._currency:   # cross-field invariant: the compound's own job
             raise ValueError(f"cannot add {self._currency} and {other._currency}")
         return Money(self._amount.add(other._amount), self._currency)
-
-    def __str__(self) -> str:               # debug convenience — never serialized
-        return f"{self._amount} {self._currency}"
 ```
+
+Note what `Money` does **not** define: any conversion dunder. A compound has
+zero — no `__str__`, no "debug display" (`serialization.md` rule 5); the
+default `repr` is the debug surface, and logging is its own norm
+(`logging.md`).
 
 **Each rule lives on the type that owns it** — the child's `__post_init__`
 guards the child; the compound's methods guard only cross-field relations —
@@ -226,11 +228,11 @@ canonicalized. When callers need different nil-handling, add a variant
   exception IS the panic path — in tests, construct directly with known-valid
   literals.
 - A leaf's conversion dunder is its **canonical form**, not display —
-  locked by the round-trip law; display formatting belongs to the
-  presentation edge; the serialization layer carries canonical primitives
-  (`serialization.md`). A compound's `__str__` is debug convenience and
-  never crosses an edge. Never compare domain objects via
-  `str(a) == str(b)`.
+  locked by the round-trip law; serialization code unwraps it through the
+  app-level `canonical(vo)` helper, never a bare cast; display formatting
+  belongs to the presentation edge (`serialization.md`). A compound,
+  entity, or aggregate defines **no conversion dunder at all** — `repr` is
+  the debug surface. Never compare domain objects via `str(a) == str(b)`.
 
 **Equality — pick the correct path:**
 

@@ -112,6 +112,7 @@ Route on the task:
 | Domain logic that fits no single object | Read `domain-services.md` — the rare case; confirm no missing type owns it first |
 | Serializing a domain object — a repo row, a wire payload, a workflow-engine payload, or "how do I get the value out of this VO?" | Read `serialization.md` — domain objects never serialize themselves; leaf VOs have one canonical conversion exit; compounds/entities/aggregates decompose through the context's parts module (application layer); edges own their shape |
 | Tempted to write a comment or docstring | Read `comments.md` — v0 is zero (machine directives exempt); the explanation moves to a name, type, test, commit, or doc, never inline |
+| Adding logging, or wanting a domain object to "print nicely" in a log | Read `logging.md` — a stub: don't invent a convention; `repr` is the interim debug surface (domain types define no display dunders) |
 | Unsure after the tests | Read `value-objects.md` first — it defines the default; identity is the exception |
 
 ## Non-negotiables (all concepts, all languages)

@@ -68,6 +68,3 @@ class Money:
         if self._currency != other._currency:
             raise ValueError(f"cannot add {self._currency} and {other._currency}")
         return Money(self._amount.add(other._amount), self._currency)
-
-    def __str__(self) -> str:
-        return f"{self._amount} {self._currency}"

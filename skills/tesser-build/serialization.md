@@ -42,16 +42,39 @@ data crosses an edge (maintainer rulings 2026-07-20).
    the canonical form reproduces an equal value (`Slug(str(s)) == s`), and a
    test asserts it per leaf. Changing a canonical form is a representation
    change — a breaking change — never a formatting tweak.
+   **Unwrap through the named helper, not a bare cast:** serialization code
+   (the parts module, a private mirror) extracts leaves via one app-level
+   `canonical(vo)` helper that dispatches to the single conversion dunder
+   the class itself defines — never a bare `str(x)`/`int(x)`. The helper
+   makes every serialization-purpose unwrap greppable and self-announcing
+   (a bare `str(x)` in an f-string stays visibly *not* serialization), and
+   it runtime-asserts the one-dunder norm:
+
+   ```python
+   def canonical(vo: object) -> str | int | float | bytes:
+       cls = type(vo)
+       for name, cast in (("__int__", int), ("__float__", float),
+                          ("__bytes__", bytes), ("__str__", str)):
+           if name in cls.__dict__:
+               return cast(vo)
+       raise TypeError(f"{cls.__name__} defines no canonical exit")
+   ```
 4. **Display is a presentation concern, never the value object's.** Locale,
    grouping, currency symbols, human phrasing — a formatter at the
    presentation edge owns them. The canonical form is not "how it looks";
    it is "what it is".
-5. **Compounds, entities, and aggregates have no primitive exit at all.**
-   They decompose structurally (rule 6); their components are value objects
-   reached through VO-returning accessors; an entity/aggregate ID is itself
-   a leaf VO, and serializing a *reference* to an aggregate means that ID's
-   canonical form. A compound's `__str__` (`"1.5 USD"`) is debug/log
-   convenience and never crosses an edge.
+5. **Compounds, entities, and aggregates have no primitive exit at all —
+   including no conversion dunders.** They decompose structurally (rule 6);
+   their components are value objects reached through VO-returning
+   accessors; an entity/aggregate ID is itself a leaf VO, and serializing a
+   *reference* to an aggregate means that ID's canonical form. A compound
+   defines **zero** conversion dunders — no `__str__`, no `__int__`, none
+   (maintainer ruling 2026-07-20: a "debug `__str__`" carve-out reads
+   exactly like the single-representation carve-out this norm closed, so it
+   doesn't exist; the default `repr` serves debugging, and how constructed
+   apps log is its own future norm — `logging.md`, placeholder). The
+   contract is mechanically crisp: a leaf has exactly one matching
+   conversion dunder; a structured type has none.
 6. **One decompose walk per context: the parts module.** A single module in
    the **application layer** (role, not filename — layout stays free) owns
    the outbound walk for the context's domain types, producing a **total,
@@ -113,9 +136,11 @@ belongs to the edge, recorded where its golden test lives.
   passthrough accessors on a VO.
 - The **public-decompiler check** (this wave) flags rule 1's method half: a
   public method on a domain type returning a spec-classified type, an
-  emit-a-sink method streaming private fields out, and a leaf VO with a
-  second or mismatched conversion dunder. Deeper laundering (locals,
-  helpers, dict-building) is declared out of contract — review territory.
+  emit-a-sink method streaming private fields out, a leaf VO with a second
+  or mismatched conversion dunder, and **any conversion dunder on a
+  compound/entity/aggregate** (rule 5's zero-dunder contract). Deeper
+  laundering (locals, helpers, dict-building) is declared out of contract —
+  review territory.
 - The **compound-raw-primitive check** (this wave) flags rule 5's internal
   half: a multi-field VO holding bare primitives instead of child VOs.
 - The **parts import boundary** (adapters consume parts, not domain types,
@@ -144,6 +169,12 @@ belongs to the edge, recorded where its golden test lives.
   divergent adapter instead.
 - **Parsing `str(x)` to extract data:** the canonical form is an exit, not
   a transport container for components.
+- **Bare-cast unwrapping:** `str(vo)` inside a parts module where
+  `canonical(vo)` belongs — the unwrap works but stops being greppable or
+  distinguishable from incidental display casts.
+- **A "just for logging" dunder on a compound:** the zero-dunder contract
+  has no debug carve-out; `repr` is the debug surface, and logging norms
+  are `logging.md`'s to settle.
 - **Framework-shaped domain:** public fields or primitive accessors added
   "because the serializer needs them" — route the framework through parts.
 
