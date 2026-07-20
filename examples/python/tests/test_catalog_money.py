@@ -4,7 +4,7 @@ from catalog.money import Money, MoneyAmount, MoneyCurrency, MoneySpec
 
 
 def _money(amount: str, currency: str = "USD") -> Money:
-    return Money.from_spec(MoneySpec(amount=amount, currency=currency))
+    return Money(MoneySpec(amount=amount, currency=currency))
 
 
 def test_equality_across_representations() -> None:
@@ -17,8 +17,8 @@ def test_equality_across_representations() -> None:
 
 
 def test_amount_equality_across_representations() -> None:
-    assert MoneyAmount.parse("1.5") == MoneyAmount.parse("1.50")
-    assert MoneyAmount.parse("1.5") != MoneyAmount.parse("2.0")
+    assert MoneyAmount("1.5") == MoneyAmount("1.50")
+    assert MoneyAmount("1.5") != MoneyAmount("2.0")
 
 
 def test_rejects_invalid() -> None:
@@ -32,13 +32,13 @@ def test_rejects_invalid() -> None:
 
 def test_components_are_value_objects() -> None:
     m = _money("1.50")
-    assert m.amount == MoneyAmount.parse("1.50")
+    assert m.amount == MoneyAmount("1.50")
     assert m.currency == MoneyCurrency("USD")
 
 
 def test_amount_canonical_round_trip() -> None:
-    a = MoneyAmount.parse("1.50")
-    assert MoneyAmount.parse(str(a)) == a
+    a = MoneyAmount("1.50")
+    assert MoneyAmount(str(a)) == a
 
 
 def test_currency_canonical_round_trip() -> None:

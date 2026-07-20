@@ -22,7 +22,7 @@ class Product:
         except ValueError as e:
             raise ValueError(f"invalid sku: {e}") from e
         try:
-            self._price = Money.from_spec(spec.price)
+            self._price = Money(spec.price)
         except ValueError as e:
             raise ValueError(f"invalid price: {e}") from e
         self._labels = Labels.new(spec.labels)

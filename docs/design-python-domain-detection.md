@@ -135,11 +135,19 @@ accessor at all, only `__str__`.
 > not hidden raw primitives — `Money{MoneyAmount, MoneyCurrency}`
 > (`examples/python/catalog/money.py`); single-concept behavior lives on
 > the child, cross-field invariants on the compound; the compound
-> construction REVISIT is closed to the factory shape (`from_spec` parses
-> leaves into child VOs; the auto-init accepts only child VOs and needs no
-> guard). Compounds, entities, and aggregates have no primitive exit at
-> all — they decompose via the per-context parts module (application
-> layer); the spec stays inbound-only.
+> construction REVISIT is closed to **(b)-uniform**: every structured type
+> has ONE door, its own `__init__(self, spec)` (`frozen=True, init=False`,
+> the TB003-sanctioned site, TB013's entity door, Go's `NewX(spec)`
+> symmetric) — **no `from_spec` classmethods** (supersedes the
+> `spec + from_spec` wording in §4.4 and §5's "structured type has a
+> `from_spec`" detection signal, which becomes "structured type's `__init__`
+> takes its spec"); a leaf needing conversion widens its one door to a
+> union (`str | Decimal`), no `parse` classmethod; behavior methods
+> re-enter through the door via canonical forms (lossless by the
+> round-trip law). Compounds, entities, and aggregates have no primitive
+> exit at all — zero conversion dunders (`repr` is the debug surface;
+> logging is its own future norm) — they decompose via the per-context
+> parts module (application layer); the spec stays inbound-only.
 
 ---
 
@@ -267,10 +275,10 @@ the "other"/value-family rules above.
    its `ExpenseReport` "aggregate root" owned a collection of *value objects*,
    contradicting the settled root definition (§2: a root embeds ≥1 **entity**).
    *Resolved 2026-07-20: the worked example is `MoneyAmount` in
-   `examples/python/catalog/money.py` (Decimal-backed child VO — `parse`,
-   non-negative guard, `add`, canonical text via `__str__`, round-trip law
-   locked in tests), held by `Money` and exposed as a VO accessor, exactly
-   this pattern.*
+   `examples/python/catalog/money.py` (Decimal-backed child VO — one
+   union-door `__init__(str | Decimal)`, non-negative guard, `add`,
+   canonical text via `__str__`, round-trip law locked in tests), held by
+   `Money` and exposed as a VO accessor, exactly this pattern.*
 3. **Do specs live in `*/domain/**`** — they sit beside domain types; detection
    classifies them by signature regardless, so this is a labeling call, not a
    blocker.

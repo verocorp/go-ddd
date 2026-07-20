@@ -14,7 +14,7 @@ def _spec() -> ProductSpec:
 def test_construction() -> None:
     p = Product(_spec())
     assert p.sku == SKU("TSHIRT-BLK-M")
-    assert p.price == Money.from_spec(MoneySpec(amount="19.99", currency="USD"))
+    assert p.price == Money(MoneySpec(amount="19.99", currency="USD"))
     assert p.labels.get("color") == "black"
 
 

@@ -79,23 +79,28 @@ compound's own is exactly the **cross-field invariants** (currency match on
 same-primitive transposition a type error, and gives serialization a
 conformant path (`serialization.md` rule 5).
 
-*The construction REVISIT is closed (2026-07-20):* the canonical compound
-shape is **the factory shape** — `from_spec` parses each primitive leaf into
-its child VO; the auto-generated `__init__` takes child VOs. The old
-objection to this shape (the auto-init as an unguarded second door)
-dissolved with child-VO components: the auto-init accepts only types that
-cannot exist invalid, so the compound needs no `__post_init__` guard at all
-— invalid Money is unrepresentable *by construction of its parts*. The
-`@dataclass(frozen=True, init=False)` spec-taking-`__init__` shape remains
-the **entity** door (`python.md#entities`; TB003 sanctions exactly that
-site), not the compound-VO norm.
+*The construction REVISIT is closed (2026-07-20, revised same day to
+(b)-uniform):* **every structured type has ONE door, and that door is its
+own `__init__` taking the spec** — `@dataclass(frozen=True, init=False)`
+with `__init__(self, spec)` assigning child VOs via `object.__setattr__`
+(TB003 sanctions exactly this site). This is the same single door an entity
+has (TB013), and the same shape as Go's `NewMoney(spec)` — one construction
+story across types and languages. There is **no `from_spec`** (a factory
+classmethod is a second public idiom for the same job) and no reliance on
+the dataclass auto-init. A leaf whose construction involves conversion
+(str → Decimal) widens its one door to a union (`str | Decimal`) rather
+than growing a `parse` classmethod. The cost, priced in deliberately:
+behavior methods that produce new instances re-enter **through the door**,
+building the spec from canonical forms (`str(total)`) — lossless by the
+round-trip law, and the only construction path stays the only construction
+path.
 
 **Warning — hiding a field breaks keyword construction.** Renaming `amount` to
 `_amount` renames the auto-generated `__init__` parameter, so
 `Money(amount=..., currency=...)` raises `TypeError` at every call site the
 moment you comply with TB010. Don't reach for `Money(_amount=...)` (leaks the
 private name) or positional args (unreadable past two fields) — **route
-construction through the spec** (`Money.from_spec(MoneySpec(...))`), which is
+construction through the spec** (`Money(MoneySpec(...))` — the one door), which is
 the construction path tests should exercise
 anyway. Field data (consumer pilot, 2026-07-19): the field rename itself is
 minutes; the construction-site fallout is the real cost, and spec-routing is the
@@ -110,21 +115,19 @@ class MoneySpec:          # spec: primitive leaves only — the inbound door
     amount: str
     currency: str
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class MoneyAmount:        # child VO: owns the single-concept rules + behavior
     _value: Decimal
 
-    @classmethod
-    def parse(cls, raw: str) -> "MoneyAmount":
-        try:
-            value = Decimal(raw)
-        except InvalidOperation as e:
-            raise ValueError(f"invalid amount: {raw!r}") from e
-        return cls(value)
-
-    def __post_init__(self) -> None:
-        if self._value < 0:
-            raise ValueError(f"amount must not be negative: {self._value}")
+    def __init__(self, value: "str | Decimal") -> None:   # ONE door; union = raw or canonical form
+        if isinstance(value, str):
+            try:
+                value = Decimal(value)
+            except InvalidOperation as e:
+                raise ValueError(f"invalid amount: {value!r}") from e
+        if value < 0:
+            raise ValueError(f"amount must not be negative: {value}")
+        object.__setattr__(self, "_value", value)
 
     def add(self, other: "MoneyAmount") -> "MoneyAmount":
         return MoneyAmount(self._value + other._value)
@@ -133,7 +136,7 @@ class MoneyAmount:        # child VO: owns the single-concept rules + behavior
         return str(self._value)
 
 @dataclass(frozen=True)
-class MoneyCurrency:
+class MoneyCurrency:                        # no conversion needed → the auto-init IS the one door
     _value: str
 
     def __post_init__(self) -> None:
@@ -143,14 +146,14 @@ class MoneyCurrency:
     def __str__(self) -> str:
         return self._value
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Money:
     _amount: MoneyAmount   # child VOs — invalid Money is unrepresentable by types
     _currency: MoneyCurrency
 
-    @classmethod
-    def from_spec(cls, spec: MoneySpec) -> "Money":
-        return cls(MoneyAmount.parse(spec.amount), MoneyCurrency(spec.currency))
+    def __init__(self, spec: MoneySpec) -> None:   # the one door: spec in, child VOs built
+        object.__setattr__(self, "_amount", MoneyAmount(spec.amount))
+        object.__setattr__(self, "_currency", MoneyCurrency(spec.currency))
 
     @property
     def amount(self) -> MoneyAmount:        # components exposed as VOs, never primitives
@@ -163,7 +166,8 @@ class Money:
     def add(self, other: "Money") -> "Money":
         if self._currency != other._currency:   # cross-field invariant: the compound's own job
             raise ValueError(f"cannot add {self._currency} and {other._currency}")
-        return Money(self._amount.add(other._amount), self._currency)
+        total = self._amount.add(other._amount)
+        return Money(MoneySpec(amount=str(total), currency=str(self._currency)))  # re-enter the door
 ```
 
 Note what `Money` does **not** define: any conversion dunder. A compound has
@@ -681,14 +685,14 @@ represents the finished result.
 
 ```python
 def test_money_equality():
-    a = Money.from_spec(MoneySpec("1.5", "USD"))
-    b = Money.from_spec(MoneySpec("1.50", "USD"))
+    a = Money(MoneySpec("1.5", "USD"))
+    b = Money(MoneySpec("1.50", "USD"))
     assert a == b            # equal logical values, across representations
     assert hash(a) == hash(b)
 
 def test_money_rejects_missing_currency():
     with pytest.raises(ValueError, match="currency is required"):
-        Money.from_spec(MoneySpec("1.00", ""))
+        Money(MoneySpec("1.00", ""))
 
 def test_operation_rejects_unbalanced():
     with pytest.raises(ValueError, match="does not balance"):
