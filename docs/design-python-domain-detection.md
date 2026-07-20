@@ -103,15 +103,24 @@ is any entity **transitively composed below a root**, accessed only through it.
 
 | Signal | Verdict |
 |---|---|
-| no public *primitive* field; accessors return only VOs / safe single-rep values / defensive copies (never the raw multi-rep primitive); validates; is a `Stringer` | **domain VO** |
+| no public *primitive* field; accessors return only VOs / defensive copies (never a primitive); validates; is a `Stringer` | **domain VO** |
 | public primitive fields + no validation + no behavior | **spec** |
 
 Exposure and validation both point the same way, so spec-vs-VO is decidable. A
-VO *may* expose accessors (returning another VO, a safe single-representation
-value, or a defensive copy) — the ban is only on leaking the raw
-multi-representation primitive. A multi-rep primitive (a `Decimal` amount) is
-wrapped in its own VO (`DecimalAmount`) and exposed as that VO; a leaf VO's own
-primitive has no accessor at all, only `__str__`.
+VO *may* expose accessors returning another VO or a defensive copy — **never a
+primitive**. A multi-rep primitive (a `Decimal` amount) is wrapped in its own VO
+(`DecimalAmount`) and exposed as that VO; a leaf VO's own primitive has no
+accessor at all, only `__str__`.
+
+> **Amended 2026-07-19 (maintainer ruling, first consumer feedback).** The
+> original text here allowed a "safe single-representation value" accessor
+> (`Money.Currency()` → a currency-code string). That allowance is **closed**:
+> an accessor returning a bare primitive — single-rep or multi-rep, compound
+> component or leaf `value` — is the public field with extra steps, and consumer
+> field data showed the check-vs-norm gap immediately (a `@property` returning
+> `self._x` passed TB010 while the message claimed the representation was
+> hidden). Components are exposed as value objects; TB010 now flags the
+> passthrough accessor shape too.
 
 ---
 
@@ -121,11 +130,13 @@ primitive has no accessor at all, only `__str__`.
 2. **Entity/aggregate collapse** to one family; keep member-vs-root (graph
    position). Aggregate = entity that embeds + guards a collection.
 3. **VOs must not expose their primitive.** VO field is hidden (`_value`, no
-   public field, no primitive getter); the only value surface is `__str__`
-   (display, never equality) + domain behavior + defensive-copy collection
-   accessors. Specs keep public fields. *This reinstates the `primitiveaccessor`
-   check that v1 dropped — it is load-bearing here because it is the spec/VO
-   discriminator, not just leak-prevention.*
+   public field, no primitive getter — **no passthrough accessor either**,
+   per the 2026-07-19 amendment above); the only value surface is `__str__`
+   (display, never equality) + accessors returning value objects + domain
+   behavior + defensive-copy collection accessors. Specs keep public fields.
+   *This reinstates the `primitiveaccessor` check that v1 dropped — it is
+   load-bearing here because it is the spec/VO discriminator, not just
+   leak-prevention.*
 4. **Construction discipline.** A structured domain object is built from outside
    the boundary through its **spec + `from_spec`**; leaf primitive-wrapper VOs
    construct directly and validate in `__post_init__`. Collection VOs may take a
@@ -148,13 +159,14 @@ primitive has no accessor at all, only `__str__`.
   (`MoneySpec{Amount, Currency}`) — the compiler-level spec/VO line.
 - **Every VO implements `fmt.Stringer`**; `String()` is the display method AND
   the *sole* string accessor — no `ToString()` (`go.md:97`).
-- **No typed accessor that returns the raw multi-representation primitive** — no
+- **No typed accessor that returns a primitive** — no
   `Int()`/`Value()`/`Amount()` handing back the wrapped `int`/`*big.Rat`/`Decimal`.
   An accessor *may* return **another value object** (certus: `Quantity() →
-  quanta.Decimal`, itself a VO), a **safe single-representation value**
-  (`Money.Currency()` → a currency code), or a **defensive copy** of a
-  collection (`Labels.Values()`). The ban is on leaking the raw
-  multi-representation primitive, not on all accessors.
+  quanta.Decimal`, itself a VO) or a **defensive copy** of a collection
+  (`Labels.Values()`). *(Amended 2026-07-19: the "safe single-representation
+  value" carve-out — `Money.Currency()` → a currency code — is closed; a
+  currency code is a `Currency` value object. The ban covers every bare
+  primitive, not just multi-rep ones.)*
 - Equality is by value (`Equal`/`==`), never by `String()` or a decomposed form.
 
 ---

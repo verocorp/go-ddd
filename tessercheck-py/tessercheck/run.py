@@ -48,12 +48,24 @@ def run_source(path: str, source: str) -> list[Finding]:
     return check_source(path, source, is_test_path(path))
 
 
-def _iter_py_files(root: str) -> list[str]:
+def _iter_py_files(root: str, exclude_paths: frozenset[str] = frozenset()) -> list[str]:
     if os.path.isfile(root):
         return [root]
     found: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if exclude_paths:
+            # Exclusions are ABSOLUTE directory identities (the app root's
+            # excluded packages), not names — so the same package is pruned
+            # whether the scan starts at the app root, a parent, or anywhere
+            # else, and a nested dir merely sharing an excluded name is
+            # untouched.
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if os.path.normpath(os.path.abspath(os.path.join(dirpath, d)))
+                not in exclude_paths
+            ]
         for name in filenames:
             if name.endswith(".py"):
                 found.append(os.path.join(dirpath, name))
@@ -63,6 +75,7 @@ def _iter_py_files(root: str) -> list[str]:
 def run_paths(
     paths: list[str],
     is_test: Callable[[str], bool] | None = None,
+    exclude_paths: frozenset[str] = frozenset(),
 ) -> tuple[list[Finding], list[str]]:
     """Check every ``.py`` file under ``paths`` as one tree.
 
@@ -78,6 +91,11 @@ def run_paths(
     the meta-test injects ``lambda _: False`` to check a fixture tree as
     domain code.
 
+    ``exclude_paths`` is a set of normalized ABSOLUTE directory paths pruned
+    wherever the walk meets them — the CLI's ``--exclude`` resolved against
+    the app root (a declared not-a-context package is neither classified by
+    the totality guard nor checked, whatever root the scan starts from).
+
     Returns (findings, errors) where ``errors`` are human-readable messages for
     files that could not be read or parsed (those files are excluded from the
     registry and the checks, not fatal to the run).
@@ -88,7 +106,7 @@ def run_paths(
     sources: dict[str, str] = {}
     seen: set[str] = set()
     for root in paths:
-        for path in _iter_py_files(root):
+        for path in _iter_py_files(root, exclude_paths):
             if path in seen:
                 continue
             seen.add(path)

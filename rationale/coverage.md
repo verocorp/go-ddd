@@ -205,11 +205,11 @@ classifier design
 
 | Go analyzer | Python check | python.md rule | Fixture (`tessercheck-py/testdata/`) |
 |---|---|---|---|
-| `vofields` | `TB001` frozen-dataclass | "`frozen=True` always" | `tb001/{good,bad}.py` |
+| `vofields` | `TB001` frozen-dataclass | "`frozen=True` always" — deliberately total (specs/DTOs too): a non-frozen dataclass is invisible to the VO classifier, so any scope gate would be a hiding hole; the message states the total scope | `tb001/{good,bad}.py` |
 | `comparability` | `TB002` hashable-fields | collection VO backs itself with a sorted tuple (classification-aware: fires only on a `VALUE_OBJECT`, so a spec / persistence row is exempt) | `tb002/{good,bad}.py` |
-| `voconstructor` | `TB003` no-setattr-bypass | "no setters, no mutation" (canonicalize only in `__post_init__`) | `tb003/{good,bad}.py` |
+| `voconstructor` | `TB003` no-setattr-bypass | "no setters, no mutation" — the two construction sites are exempt: `__post_init__` (canonicalization) and `__init__` of a `@dataclass(frozen=True, init=False)` assigning its declared fields (the spec-taking shape, which has no other way in) | `tb003/{good,bad}.py` |
 | `stringequality` | `TB004` no-string-equality | "Never `str(a) == str(b)`" | `tb004/{good,bad}.py` |
-| `primitiveaccessor` | `TB010` no-primitive-exposure | a value object hides its primitive (the spec/VO discriminator), keyed on the identity-taxonomy classifier | `tb010/{good,bad}.py` |
+| `primitiveaccessor` | `TB010` no-primitive-exposure | a value object hides its primitive (the spec/VO discriminator), keyed on the identity-taxonomy classifier; covers both leak shapes — the public primitive field AND the passthrough accessor returning it (ruled 2026-07-19: components are value objects, `__str__` is the sole primitive exit) | `tb010/{good,bad}.py` |
 | — no Go analyzer (defensive-copy check is Python-only today) | `TB011` no-collection-leak | an aggregate/entity accessor returns a defensive copy, never the backing mutable collection, keyed on the classifier | `tb011/{good,bad}.py` |
 | — no Go analyzer (reference-boundary check is Python-only today) | `TB012` reference-roots-by-id | an aggregate references another root by its ID value object, never by holding the root object; keyed on the whole-tree registry (a root is a reference-identity entity that embeds ≥1 entity — `is_aggregate_root`) | `tb012/{good,bad}.py` |
 | (construction) | `TB013` construct-through-spec | a structured domain object (entity/aggregate) constructs through `__init__(self, spec)`; no separate `from_spec` factory (the value-taking-ctor half is a deferred extension) | `tb013/{good,bad}.py` |

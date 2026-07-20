@@ -255,3 +255,163 @@ def test_cli_explicit_paths_scope_checks_but_discovery_still_total(
     err = capsys.readouterr().err
     assert rc == 2
     assert "reports" in err
+
+
+def test_totality_error_distinguishes_unexported_client(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A context whose client.py exists but is not re-exported gets the
+    precise three-line fix, not the generic "unclassified" message —
+    "you have no seam" and "your seam isn't surfaced" are different defects."""
+    _pkg(tmp_path, "clinical", "")
+    (tmp_path / "clinical" / "client.py").write_text(
+        "from typing import Protocol\n\nclass Client(Protocol):\n    def ping(self) -> None: ...\n",
+        encoding="utf-8",
+    )
+    errors = totality_errors(tmp_path, classify_root(tmp_path))
+    assert len(errors) == 1
+    assert "does not re-export Client" in errors[0]
+    assert "from clinical.client import Client" in errors[0]
+    assert "unclassified" not in errors[0]
+
+
+def test_classify_root_exclude_skips_declared_packages(
+    tmp_path: pathlib.Path,
+) -> None:
+    _pkg(tmp_path, "billing", "from billing.client import Client\n")
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    _pkg(tmp_path, "demo_api", "x = 1\n")
+    assert classify_root(tmp_path).unclassified == ("demo_api", "spikes")
+    d = classify_root(tmp_path, exclude=frozenset({"spikes", "demo_api"}))
+    assert d.contexts == ("billing",)
+    assert d.unclassified == ()
+
+
+def test_classify_root_exclude_skips_even_a_client_bearing_package(
+    tmp_path: pathlib.Path,
+) -> None:
+    """An exclusion is total: an excluded package never counts as a context,
+    so excluding your only context trips the no-contexts failure loudly."""
+    _pkg(tmp_path, "billing", "from billing.client import Client\n")
+    d = classify_root(tmp_path, exclude=frozenset({"billing"}))
+    assert d.contexts == () and d.unclassified == ()
+    errors = totality_errors(tmp_path, d)
+    assert len(errors) == 1 and "no bounded contexts" in errors[0]
+
+
+def test_cli_exclude_declares_scratch_out_of_guard_and_checks(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    assert main(["--app-root", str(tmp_path)]) == 2
+    capsys.readouterr()
+    rc = main(["--app-root", str(tmp_path), "--exclude", "spikes"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "spikes" not in captured.out and captured.err == ""
+
+
+def test_cli_exclude_prunes_root_level_only_not_nested_namesake(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--exclude prunes a *root-level* package by name; a nested directory
+    that happens to share the excluded name is a different path and stays
+    scanned (the checks, not just discovery, keep seeing it)."""
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    nested = tmp_path / "billing" / "spikes"
+    nested.mkdir()
+    (nested / "__init__.py").write_text("", encoding="utf-8")
+    (nested / "leaky.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Nested:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(["--app-root", str(tmp_path), "--exclude", "spikes"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "scratch.py" not in captured.out
+    assert "leaky.py" in captured.out
+
+
+def test_cli_exclude_requires_app_root(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--exclude", "spikes", str(tmp_path)])
+    assert exc.value.code == 2
+
+
+def test_cli_exclude_blank_value_is_usage_error(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--app-root", str(tmp_path), "--exclude", " , "])
+    assert exc.value.code == 2
+
+
+def test_cli_exclude_overlapping_app_level_is_usage_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--app-root", str(tmp_path), "--app-level", "scripts", "--exclude", "scripts"])
+    assert exc.value.code == 2
+
+
+def test_cli_exclusion_is_anchored_to_the_app_root_not_the_scanned_root(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Scanning from a PARENT of the app root must still prune the excluded
+    package, and an explicitly-scanned context must keep a nested namesake —
+    exclusions are absolute directory identities, not per-root child names
+    (adversarial round 2: name-relative pruning got both cases wrong)."""
+    app = tmp_path / "app"
+    app.mkdir()
+    _good_tree(app)
+    _pkg(app, "spikes", "x = 1\n")
+    (app / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(["--app-root", str(app), "--exclude", "spikes", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "scratch.py" not in captured.out
+
+    nested = app / "billing" / "spikes"
+    nested.mkdir()
+    (nested / "leaky.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Nested:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(
+        ["--app-root", str(app), "--exclude", "spikes", str(app / "billing")]
+    )
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "leaky.py" in captured.out
+
+
+def test_cli_exclude_wins_over_an_explicit_positional_path(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Passing the excluded package as an explicit path must not sneak it back
+    into the checked file set — the declared exclusion wins, with a stderr
+    note (cross-model finding: discovery and the checks disagreed)."""
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(
+        ["--app-root", str(tmp_path), "--exclude", "spikes", str(tmp_path / "spikes")]
+    )
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "scratch.py" not in captured.out
+    assert "skipped — inside a package declared with --exclude" in captured.err

@@ -17,7 +17,10 @@ def _name_of(node: ast.expr) -> str | None:
 
 
 def _is_true(node: ast.expr) -> bool:
-    return isinstance(node, ast.Constant) and node.value is True
+    """A truthy constant — matching dataclass runtime semantics, where
+    ``frozen=1`` freezes exactly like ``frozen=True``. A non-constant
+    expression stays False (conservative)."""
+    return isinstance(node, ast.Constant) and bool(node.value)
 
 
 def _dataclass_frozen(decorators: list[ast.expr]) -> tuple[bool, bool, ast.expr | None]:
@@ -38,6 +41,28 @@ def _dataclass_frozen(decorators: list[ast.expr]) -> tuple[bool, bool, ast.expr 
                     frozen = True
         return True, frozen, dec
     return False, False, None
+
+
+def _dataclass_init_false(decorators: list[ast.expr]) -> bool:
+    """True when the ``@dataclass`` decorator declares a falsy ``init`` — the
+    explicit signal that the class hand-writes its own construction path (the
+    spec-taking ``__init__`` of a compound value object / entity). Falsy by
+    constant value (``init=False`` / ``init=0``), mirroring what the dataclass
+    machinery does at runtime."""
+    for dec in decorators:
+        target = dec.func if isinstance(dec, ast.Call) else dec
+        if _name_of(target) != "dataclass":
+            continue
+        if isinstance(dec, ast.Call):
+            for kw in dec.keywords:
+                if (
+                    kw.arg == "init"
+                    and isinstance(kw.value, ast.Constant)
+                    and not kw.value.value
+                ):
+                    return True
+        return False
+    return False
 
 
 def _annotation_base(ann: ast.expr) -> str | None:

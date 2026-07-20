@@ -1,6 +1,7 @@
 """``python -m tessercheck`` — run the checks over paths, print flake8-style."""
 
 import argparse
+import os
 import pathlib
 import sys
 from collections.abc import Sequence
@@ -58,6 +59,17 @@ def _build_parser() -> argparse.ArgumentParser:
         f"addition to the template's ({', '.join(sorted(APP_LEVEL_PACKAGES))}); "
         "requires --app-root — an extension is declared, never inferred",
     )
+    p.add_argument(
+        "--exclude",
+        metavar="NAMES",
+        help="comma-separated root-level package names the totality guard "
+        "must not classify AND the checks must not scan: scratch/demo "
+        "packages that will never be contexts, or contexts not yet adopted "
+        "(the incremental-adoption ratchet — drive this list to zero); "
+        "requires --app-root. Distinct from --app-level, which asserts a "
+        "package IS the app's plumbing — an exclusion asserts only that you "
+        "declared it out",
+    )
     return p
 
 
@@ -72,6 +84,29 @@ def _parse_codes(raw: str, parser: argparse.ArgumentParser, flag: str) -> frozen
         registered = ", ".join(sorted(codes()))
         parser.error(f"{flag}: unknown check code(s) {', '.join(unknown)} (registered: {registered})")
     return wanted
+
+
+def _parse_names(raw: str, parser: argparse.ArgumentParser, flag: str) -> frozenset[str]:
+    """Split a comma-separated package-name list; an empty list is a loud
+    usage error, never a silently-empty declaration."""
+    names = frozenset(n.strip() for n in raw.split(",") if n.strip())
+    if not names:
+        parser.error(f"{flag}: no package names given")
+    return names
+
+
+def _under_excluded(
+    path: str, app_root: pathlib.Path, excluded: frozenset[str]
+) -> bool:
+    """True when ``path`` IS an excluded root-level package (or lies inside
+    one) — an explicit positional path does not override a declared
+    exclusion; the exclusion wins."""
+    resolved = pathlib.Path(path).resolve()
+    for name in excluded:
+        target = (app_root / name).resolve()
+        if resolved == target or target in resolved.parents:
+            return True
+    return False
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -92,22 +127,47 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.app_level is not None and args.app_root is None:
         parser.error("--app-level requires --app-root")
+    if args.exclude is not None and args.app_root is None:
+        parser.error("--exclude requires --app-root")
     app_root: pathlib.Path | None = None
     app_level = APP_LEVEL_PACKAGES
+    excluded: frozenset[str] = frozenset()
     if args.app_root is not None:
         app_root = pathlib.Path(args.app_root)
         if not app_root.is_dir():
             parser.error(f"--app-root: not a directory: {args.app_root}")
         if args.app_level is not None:
-            extra = frozenset(n.strip() for n in args.app_level.split(",") if n.strip())
-            if not extra:
-                parser.error("--app-level: no package names given")
-            app_level = APP_LEVEL_PACKAGES | extra
+            app_level = APP_LEVEL_PACKAGES | _parse_names(args.app_level, parser, "--app-level")
+        if args.exclude is not None:
+            excluded = _parse_names(args.exclude, parser, "--exclude")
+            overlap = sorted(excluded & app_level)
+            if overlap:
+                parser.error(
+                    f"--exclude: {', '.join(overlap)} already declared app-level — "
+                    "a package is plumbing or excluded, never both"
+                )
 
     paths: list[str] = args.paths or ([str(app_root)] if app_root is not None else ["."])
-    findings, errors = run_paths(paths)
+    exclude_paths: frozenset[str] = frozenset()
+    if app_root is not None and excluded:
+        # The exclusion is anchored to the APP ROOT as absolute directory
+        # identities, and it wins over an explicitly-passed path too —
+        # otherwise "--exclude spikes app/spikes" would scan the very package
+        # the user declared out, and discovery and the checks would disagree.
+        exclude_paths = frozenset(
+            os.path.normpath(os.path.abspath(str(app_root / name))) for name in excluded
+        )
+        dropped = [p for p in paths if _under_excluded(p, app_root, excluded)]
+        paths = [p for p in paths if p not in dropped]
+        for p in dropped:
+            print(f"{p}: skipped — inside a package declared with --exclude", file=sys.stderr)
+    findings, errors = run_paths(paths, exclude_paths=exclude_paths)
     if app_root is not None:
-        errors.extend(totality_errors(app_root, classify_root(app_root, app_level), app_level))
+        errors.extend(
+            totality_errors(
+                app_root, classify_root(app_root, app_level, excluded), app_level
+            )
+        )
     if selected is not None:
         findings = [f for f in findings if f.code in selected]
     if ignored:

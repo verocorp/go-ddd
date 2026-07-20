@@ -18,6 +18,24 @@ Deferred work with context. Each entry carries enough for a cold pickup.
 
 ## Toolkit
 
+- [ ] **Go-side `primitiveaccessor` analyzer** (norm strengthened 2026-07-19)
+  - **What:** the accessor half of the no-primitive-exposure norm is enforced
+    in Python only (TB010 flags a VO `@property`/method whose body is a bare
+    `return self._x` with a primitive type). Go has the norm in the design doc
+    (`docs/design-python-domain-detection.md` "Grounded against Go", amended:
+    the `Money.Currency()` single-rep carve-out is closed) but no analyzer —
+    `rationale/coverage.md` row "#6a/6b no primitive accessors" is still demo
+    pending. Concretely: `examples/catalog/money.go`'s `Currency() string`
+    accessor is the exact shape the amendment closes and is now a
+    non-conformant example with nothing to flag it until this ships.
+  - **How:** a `go/analysis` pass over VO-candidate types flagging exported
+    methods that return a builtin/`*big.Rat`/`decimal` field unchanged
+    (mirror `_bare_self_field_returned`); add the coverage row + demo in the
+    same change.
+  - **Why not now:** the 2026-07-19 change set was the Python consumer
+    feedback wave; the Go mirror deserves its own predeclared demo per the
+    coverage-matrix discipline.
+
 - [ ] **Generic consumer activation recipe** (eng review 2026-07-19, TODO 12A)
   - **What:** an activation section for `skills/tesser-build` documenting how a
     consumer wires the skill into its agent host — Claude Code (Skill system

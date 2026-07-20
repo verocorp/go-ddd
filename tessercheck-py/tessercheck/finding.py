@@ -46,7 +46,10 @@ CHECKS: tuple[CheckMeta, ...] = (
     CheckMeta(
         "TB001",
         "frozen-dataclass",
-        "a domain dataclass must be frozen=True (immutability + value equality)",
+        "every dataclass must be frozen=True — domain values for immutability "
+        "+ value equality; specs/DTOs too, because frozen costs them nothing "
+        "and a non-frozen dataclass is invisible to the VO classifier "
+        "(deliberately total; inline-ignore a boundary shape that must mutate)",
     ),
     CheckMeta(
         "TB002",
@@ -58,7 +61,8 @@ CHECKS: tuple[CheckMeta, ...] = (
         "TB003",
         "no-setattr-bypass",
         "object.__setattr__/__delattr__ must not bypass immutability outside "
-        "__post_init__",
+        "the construction sites: __post_init__, or __init__ of a "
+        "@dataclass(frozen=True, init=False) assigning its declared fields",
     ),
     CheckMeta(
         "TB004",
@@ -68,8 +72,10 @@ CHECKS: tuple[CheckMeta, ...] = (
     CheckMeta(
         "TB010",
         "no-primitive-exposure",
-        "a value object must not expose a public primitive field — hide the "
-        "representation (the spec/VO discriminator; specs expose, VOs don't)",
+        "a value object's primitive must not escape — neither as a public "
+        "primitive field nor through a passthrough accessor returning it; "
+        "components are exposed as value objects, __str__ is the sole "
+        "primitive exit (the spec/VO discriminator; specs expose, VOs don't)",
     ),
     CheckMeta(
         "TB011",

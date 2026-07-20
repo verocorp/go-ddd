@@ -5,6 +5,58 @@ Versions follow the 4-digit `MAJOR.MINOR.PATCH.MICRO` format. (This file
 versions the toolkit repo as a whole; `tessercheck-py/pyproject.toml`
 carries the analyzer package's own version — separate streams.)
 
+## [0.0.4.0] - 2026-07-19
+
+### Added
+
+- `--exclude` on the tessercheck-py CLI: declare root-level packages out of
+  both the totality guard and the checked file set — scratch/demo packages
+  that will never be contexts, or contexts not yet adopted. This is the
+  incremental-adoption ratchet the first consumer run showed was missing:
+  a repo can now put the guard in CI on the contexts that conform today
+  and drive the exclusion list to zero, while exit-2 teeth stay total over
+  everything not explicitly declared. An exclusion wins even over an
+  explicitly-passed path, so discovery and the checks can never disagree.
+- The no-primitive-escape ruling for value objects (2026-07-19): an
+  accessor that hands the wrapped primitive straight back — a compound
+  component (`rect.x` returning `"1"`) or a leaf `value` property — is the
+  public field with extra steps. TB010 now flags the passthrough-accessor
+  shape (including the one-alias disguise `v = self._x; return v` and
+  `Optional`/union-wrapped primitives), components are exposed as value
+  objects, and `__str__` stays the sole primitive exit. The design doc's
+  earlier "safe single-representation accessor" allowance is closed with
+  dated amendments; the Go-side mirror analyzer is queued in TODOS.md.
+
+### Changed
+
+- TB001's total scope is now stated, not implied: every dataclass is
+  frozen — specs and adapter DTOs included, because frozen costs an inert
+  carrier nothing and a non-frozen dataclass is invisible to the VO
+  classifier. The finding message and docs say exactly that instead of
+  the domain-scoped wording that invited pushback.
+- The totality guard distinguishes "you have no seam" from "your seam
+  isn't surfaced": a context whose `client.py` exists but isn't
+  re-exported gets the precise three-line fix message.
+- `value-objects.md` / `python.md` reconciled to the strengthened norm:
+  the stale public-field `EmailAddress` example hidden, the compound-VO
+  construction REVISIT narrowed to the two sanctioned shapes, and the
+  field-hiding construction-break warning added (hiding a field renames
+  the dataclass `__init__` parameter — construct through the spec), the
+  friction the first consumer migration actually hit (skill-version 12).
+
+### Fixed
+
+- TB003 no longer flags the spec-taking `__init__` of a
+  `@dataclass(frozen=True, init=False)` assigning its own declared fields
+  — the construction shape TB013 itself prescribes had no conformant way
+  to assign fields, so the norm penalized code for following another norm
+  (the first consumer's entire TB003 count was this false-positive class).
+  The exemption is deliberately narrow: `__delattr__`, ordinary methods,
+  non-field names, and an undeclared hand-written `__init__` stay flagged.
+- `frozen`/`init` dataclass keywords are read by constant truthiness,
+  matching runtime semantics: `init=0` is a valid spec-init shape and
+  `frozen=1` freezes — no more false positives on runtime-valid code.
+
 ## [0.0.3.0] - 2026-07-19
 
 ### Added
