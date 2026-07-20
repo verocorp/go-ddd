@@ -49,3 +49,56 @@ Deferred work with context. Each entry carries enough for a cold pickup.
     document a host path that hasn't been exercised once.
   - **Start at:** the de-identified relayed form of the pilot consumer's working
     `AGENTS.md` line.
+
+- [ ] **Time-type taxonomy** (opened 2026-07-20 with the serialization norm)
+  - **What:** one canonical wire form is pinned (aware-UTC ISO-8601,
+    microsecond precision — `serialization.md` rule 3), but real domains need
+    *several* time types — instant vs calendar date vs local time, and
+    per-precision variants — each deserving its own leaf-VO shape and its own
+    canonical form. Decide the taxonomy and per-type canonical policies so
+    consumers aren't pigeon-holed into one type.
+  - **Trigger:** the first datetime-bearing VO a consumer relays (or PR-B if
+    the verified impl grows one).
+  - **Why not now:** the pinned single form unblocks the serialization wave;
+    the taxonomy is a modeling decision that deserves its own evidence.
+
+- [ ] **Leaf-vs-compound discriminator: collect the hard cases** (2026-07-20)
+  - **What:** the discriminator ("does the concept have a *standardized*
+    canonical primitive representation? → leaf") decides borderline types —
+    URL, E.164 phone, postal address, email-with-display-name. A wrong call is
+    expensive to reverse (re-classification breaks construction AND
+    serialization), so hard cases should be collected and ruled once, in the
+    doc, as they surface.
+  - **How:** append each borderline type + its ruling to
+    `value-objects.md#decisions-you-must-make`; when 3+ accumulate, sharpen
+    the discriminator's wording from the pattern.
+  - **Why not now:** no hard case has actually surfaced yet; ruling on
+    hypotheticals invents doctrine.
+
+- [ ] **Change-handling red team (ops/migrations, pulled closer)** (2026-07-20)
+  - **What:** red-team what can *change* under the settled norms and how each
+    change is handled: a canonical form (persisted bytes → migration), a
+    parts field (total record vs old rows — the migration caveat in
+    `serialization.md`), a leaf↔compound re-classification, spec evolution,
+    wire-shape versioning. Operational concerns were deliberately deferred
+    ("static code only" — SKILL.md), but serialization puts persisted bytes
+    downstream of these norms, so part of the ops/migration story lands
+    sooner than the rest.
+  - **How:** enumerate change classes → for each, name the blast radius, the
+    loud/silent profile, and the sanctioned procedure; fold results into
+    `serialization.md` (per-edge migration decisions) and a future
+    change-sequencing doc.
+  - **Why not now:** wave (a/b/c) ships the static norms first; the red team
+    needs those fixed as its subject.
+
+- [ ] **Checker contracts as fixtures-first** (2026-07-20)
+  - **What:** a check's *normative* contract artifact is its
+    `good/bad` fixture pair set — authored and reviewed BEFORE the checker,
+    with the doc prose describing and pointing at the fixtures, never the
+    other way around. Prevents prose-derived checkers from encoding an
+    imprecise sentence as analyzer semantics.
+  - **How:** apply starting with the serialization-wave checks (PR-C): land
+    fixture pairs as the reviewed contract, then the checker that satisfies
+    them; the meta-test already enforces pair existence.
+  - **Why not now:** it IS now — this entry records the discipline so it
+    outlives the wave.

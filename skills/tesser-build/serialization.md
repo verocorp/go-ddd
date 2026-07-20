@@ -35,9 +35,18 @@ data crosses an edge (maintainer rulings 2026-07-20).
    exit as canonical text via `__str__` under an explicit policy:
    - `Decimal` → its string form (`str(Decimal)`) — cross-language precision
      is why: the same value must survive Python/Go/SQL hops, and only the
-     string guarantees it.
-   - `datetime` → timezone-aware UTC ISO-8601 at a fixed precision. Naive
-     datetimes don't cross edges.
+     string guarantees it. Known and accepted (2026-07-20): equal Decimals
+     may render distinct canonical text (`1.5` and `1.50` are equal values
+     with different forms) — the round-trip law holds; byte-identity of
+     equal values does not. Revisit only on field evidence (e.g. byte-level
+     dedup or idempotency keying on canonical strings).
+   - `datetime` → timezone-aware, UTC-normalized, ISO-8601 with
+     **microsecond precision** — exactly
+     `value.astimezone(timezone.utc).isoformat(timespec="microseconds")`
+     (`2026-07-20T15:16:15.123456+00:00`). Pinned 2026-07-20. Naive
+     datetimes don't cross edges. The broader time-type taxonomy (instant
+     vs date vs local time; per-precision types) is a named open decision —
+     `TODOS.md`.
    **The round-trip law locks every canonical exit:** reconstructing from
    the canonical form reproduces an equal value (`Slug(str(s)) == s`), and a
    test asserts it per leaf. Changing a canonical form is a representation
