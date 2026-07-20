@@ -8,7 +8,7 @@ from campaign.domain.money import MoneySpec
 from campaign.domain.short_link import ShortLinkSpec
 from campaign.domain.values import CampaignID, Slug
 from errors import InfraError
-from serialization import canonical_text
+from serialization import canonical
 
 
 @dataclass(frozen=True)
@@ -64,13 +64,13 @@ class InMemoryCampaignRepository:
     def find(self, id: CampaignID) -> Campaign | None:
         if self._down:
             raise InfraError("campaign store unavailable")
-        row = self._rows.get(canonical_text(id))
+        row = self._rows.get(canonical(id, str))
         return None if row is None else Campaign(_spec(row))
 
     def find_by_slug(self, slug: Slug) -> Campaign | None:
         if self._down:
             raise InfraError("campaign store unavailable")
-        value = canonical_text(slug)
+        value = canonical(slug, str)
         for row in self._rows.values():
             if any(link.slug == value for link in row.links):
                 return Campaign(_spec(row))

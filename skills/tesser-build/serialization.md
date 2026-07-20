@@ -52,20 +52,34 @@ data crosses an edge (maintainer rulings 2026-07-20).
    change — a breaking change — never a formatting tweak.
    **Unwrap through the named helper, not a bare cast:** serialization code
    (the parts module, a private mirror) extracts leaves via one app-level
-   `canonical(vo)` helper that dispatches to the single conversion dunder
-   the class itself defines — never a bare `str(x)`/`int(x)`. The helper
-   makes every serialization-purpose unwrap greppable and self-announcing
-   (a bare `str(x)` in an f-string stays visibly *not* serialization), and
-   it runtime-asserts the one-dunder norm:
+   `canonical(vo, expected)` helper — never a bare `str(x)`/`int(x)`. The
+   caller names the primitive it expects (`canonical(c.id, str)`), which
+   keeps the return statically typed under mypy --strict, and the helper
+   runtime-asserts the full contract: the class defines exactly one
+   conversion dunder, that dunder is the one the expectation implies, and
+   the value it returns actually is that primitive (a `__bytes__` returning
+   `str` is caught, not passed through). One name means every
+   serialization-purpose unwrap stays greppable and self-announcing — a
+   bare `str(x)` in an f-string stays visibly *not* serialization.
+   (Refined 2026-07-20 from the one-arg `canonical(vo)` shape on outside
+   review: the union return forced either untyped parts fields or a second
+   helper per primitive, and the one-arg form couldn't catch a mismatched
+   or lying exit.) Verified impl: `examples/python-app/serialization.py`:
 
    ```python
-   def canonical(vo: object) -> str | int | float | bytes:
+   T = TypeVar("T", str, int, float, bytes)
+
+   def canonical(vo: object, expected: type[T]) -> T:
        cls = type(vo)
-       for name, cast in (("__int__", int), ("__float__", float),
-                          ("__bytes__", bytes), ("__str__", str)):
-           if name in cls.__dict__:
-               return cast(vo)
-       raise TypeError(f"{cls.__name__} defines no canonical exit")
+       defined = [name for name in _EXITS if name in cls.__dict__]
+       if len(defined) != 1:
+           raise TypeError(f"{cls.__name__} must define exactly one canonical exit, found {defined!r}")
+       if _EXITS[defined[0]] is not expected:
+           raise TypeError(f"{cls.__name__} defines {defined[0]}; its canonical form is not {expected.__name__}")
+       value = getattr(vo, defined[0])()
+       if not isinstance(value, expected):
+           raise TypeError(f"{cls.__name__}.{defined[0]} returned {type(value).__name__}, not {expected.__name__}")
+       return value
    ```
 4. **Display is a presentation concern, never the value object's.** Locale,
    grouping, currency symbols, human phrasing — a formatter at the
@@ -178,8 +192,16 @@ belongs to the edge, recorded where its golden test lives.
 - **Parsing `str(x)` to extract data:** the canonical form is an exit, not
   a transport container for components.
 - **Bare-cast unwrapping:** `str(vo)` inside a parts module where
-  `canonical(vo)` belongs — the unwrap works but stops being greppable or
-  distinguishable from incidental display casts.
+  `canonical(vo, str)` belongs — the unwrap works but stops being greppable
+  or distinguishable from incidental display casts.
+- **Merging parts and spec because they look alike:** a minimal context's
+  parts record is often a field-for-field twin of its spec — that is a
+  coincidence of the simple case, not an identity. The spec is inbound-only
+  (accepts any valid representation, feeds the validating constructor); the
+  parts record is outbound-only (carries exactly the canonical forms, and
+  grows derived fields the constructor must never accept). Deduplicating
+  them welds the two directions together; the verified impl locks the
+  separation with a test that the parts module never imports a spec.
 - **A "just for logging" dunder on a compound:** the zero-dunder contract
   has no debug carve-out; `repr` is the debug surface, and logging norms
   are `logging.md`'s to settle.

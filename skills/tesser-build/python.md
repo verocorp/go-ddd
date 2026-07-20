@@ -234,7 +234,7 @@ canonicalized. When callers need different nil-handling, add a variant
   literals.
 - A leaf's conversion dunder is its **canonical form**, not display —
   locked by the round-trip law; serialization code unwraps it through the
-  app-level `canonical(vo)` helper, never a bare cast; display formatting
+  app-level `canonical(vo, expected)` helper, never a bare cast; display formatting
   belongs to the presentation edge (`serialization.md`). A compound,
   entity, or aggregate defines **no conversion dunder at all** — `repr` is
   the debug surface. Never compare domain objects via `str(a) == str(b)`.

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import dataclasses
+import pathlib
 
 import pytest
 
@@ -86,6 +88,24 @@ def test_store_holds_rows_not_live_objects() -> None:
     reloaded = repo.find(CampaignID(_CAMPAIGN_ID))
     assert reloaded is not None
     assert campaign_parts(reloaded) == campaign_parts(original)
+
+
+def test_parts_module_never_touches_specs() -> None:
+    source = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "campaign"
+        / "application"
+        / "parts.py"
+    ).read_text(encoding="utf-8")
+    imported = {
+        alias.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    spec_imports = {name for name in imported if name.endswith("Spec")}
+    assert not spec_imports, f"parts is outbound-only; it must never touch specs: {spec_imports}"
+    assert "Spec" not in source
 
 
 def test_load_reruns_invariants_on_stale_rows() -> None:
