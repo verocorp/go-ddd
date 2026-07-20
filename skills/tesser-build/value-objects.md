@@ -35,8 +35,13 @@ persistence-only column, a local implementation detail. Blanket wrapping is
    a different value. (Identity-free things can't "change"; there is no *it*.)
 2. **One validating constructor** is the only construction path. Invalid
    values are unrepresentable after construction.
-3. **Private fields, public accessors.** The representation never leaks; the
-   constructor's guarantees can't be bypassed.
+3. **Private fields — and the primitive stays private.** The representation
+   never leaks; the constructor's guarantees can't be bypassed. An accessor
+   that hands the wrapped primitive straight back (`slot.key → "tue-0900"`)
+   is the public field with extra steps and is banned outright: a compound
+   value's components are value objects and are exposed as such; a leaf value
+   exposes no accessor at all, only its display form, which is also where the
+   serialization edge unwraps it.
 4. **Equality is by value, and it's explicit.** Same attributes ⇒ equal,
    across all representations of the same logical value.
 5. **Validation belongs to the value, not its parents.** A parent constructor
@@ -107,8 +112,9 @@ candidates for human judgment* — never the definition. A DTO can carry an
   value.
 - **Parent re-validation:** an aggregate's constructor re-checking an email
   format. The `EmailAddress` constructor already did; trust it.
-- **Leaked representation:** a public field or an accessor returning the
-  mutable innards. Copies out, never references.
+- **Leaked representation:** a public field, a passthrough accessor returning
+  the wrapped primitive, or an accessor returning the mutable innards. Wrap
+  components in their own value objects; copies out, never references.
 - **Validation drift:** a second construction path (a mapper, a test helper)
   that skips the constructor. One door.
 

@@ -40,6 +40,26 @@ def _dataclass_frozen(decorators: list[ast.expr]) -> tuple[bool, bool, ast.expr 
     return False, False, None
 
 
+def _dataclass_init_false(decorators: list[ast.expr]) -> bool:
+    """True when the ``@dataclass`` decorator declares ``init=False`` — the
+    explicit signal that the class hand-writes its own construction path (the
+    spec-taking ``__init__`` of a compound value object / entity)."""
+    for dec in decorators:
+        target = dec.func if isinstance(dec, ast.Call) else dec
+        if _name_of(target) != "dataclass":
+            continue
+        if isinstance(dec, ast.Call):
+            for kw in dec.keywords:
+                if (
+                    kw.arg == "init"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is False
+                ):
+                    return True
+        return False
+    return False
+
+
 def _annotation_base(ann: ast.expr) -> str | None:
     """Base name of an annotation: ``list[X]``/``List[X]``/``list`` -> ``list``."""
     if isinstance(ann, ast.Name):

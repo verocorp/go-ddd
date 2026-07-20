@@ -36,6 +36,13 @@ Flags:
 - `--app-level NAMES` — extend the app-level package set (default: the
   template's `bootstrap`, `srv`, `tests`) by declaration; requires
   `--app-root`.
+- `--exclude NAMES` — declare root-level packages out of the totality guard
+  *and* out of the checked file set: scratch/demo packages that will never be
+  contexts, or contexts not yet adopted (the incremental-adoption ratchet —
+  drive the list to zero). Requires `--app-root`. Distinct from `--app-level`:
+  that flag asserts a package IS the app's plumbing; an exclusion asserts only
+  that you declared it out. The guard's exit-2 teeth stay total over
+  everything not declared.
 
 Output is flake8-style `path:line:col: CODE message`. Suppress a single line
 with a trailing `# tessercheck:ignore`.
@@ -46,16 +53,16 @@ Shape checks (TB001–TB004):
 
 | Code | Rule |
 |---|---|
-| **TB001** | a domain `@dataclass` must be `frozen=True` (immutability + value equality) |
+| **TB001** | every `@dataclass` must be `frozen=True` — domain values for immutability + value equality; specs/DTOs too, because frozen costs them nothing and a non-frozen dataclass is invisible to the VO classifier (deliberately total; inline-ignore a boundary shape that must mutate) |
 | **TB002** | a frozen **value object's** field must not be a mutable collection (`list`/`dict`/`set`) — its `__hash__` raises; use a `tuple`/`frozenset` (classification-aware: a spec/persistence row is exempt) |
-| **TB003** | `object.__setattr__`/`__delattr__` must not bypass immutability **outside `__post_init__`** (canonicalization on the construction path is allowed) |
+| **TB003** | `object.__setattr__`/`__delattr__` must not bypass immutability outside the **construction sites**: `__post_init__` (canonicalization), or `__init__` of a `@dataclass(frozen=True, init=False)` assigning its declared fields (the spec-taking shape has no other way in) |
 | **TB004** | compare value objects by value, not by `str()` representation (fires only when **both** sides are `str()`/`__str__()` calls) |
 
 Identity-taxonomy checks (TB010–TB014), keyed on the classifier:
 
 | Code | Rule |
 |---|---|
-| **TB010** | a value object must not expose a public primitive field — hide the representation (the spec/VO discriminator; specs expose, VOs don't) |
+| **TB010** | a value object's primitive must not escape — neither as a public primitive field nor through a passthrough accessor returning it (`@property ... return self._x`); components are exposed as value objects, `__str__` is the sole primitive exit (the spec/VO discriminator; specs expose, VOs don't) |
 | **TB011** | an aggregate/entity accessor must not return its backing mutable collection — return a defensive copy |
 | **TB012** | an aggregate/entity references another aggregate root by its ID value object, never by holding the root object |
 | **TB013** | a structured domain object (entity/aggregate) constructs through its spec — `__init__(self, spec)`; no separate `from_spec` factory |

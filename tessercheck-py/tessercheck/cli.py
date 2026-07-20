@@ -58,6 +58,17 @@ def _build_parser() -> argparse.ArgumentParser:
         f"addition to the template's ({', '.join(sorted(APP_LEVEL_PACKAGES))}); "
         "requires --app-root — an extension is declared, never inferred",
     )
+    p.add_argument(
+        "--exclude",
+        metavar="NAMES",
+        help="comma-separated root-level package names the totality guard "
+        "must not classify AND the checks must not scan: scratch/demo "
+        "packages that will never be contexts, or contexts not yet adopted "
+        "(the incremental-adoption ratchet — drive this list to zero); "
+        "requires --app-root. Distinct from --app-level, which asserts a "
+        "package IS the app's plumbing — an exclusion asserts only that you "
+        "declared it out",
+    )
     return p
 
 
@@ -92,8 +103,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.app_level is not None and args.app_root is None:
         parser.error("--app-level requires --app-root")
+    if args.exclude is not None and args.app_root is None:
+        parser.error("--exclude requires --app-root")
     app_root: pathlib.Path | None = None
     app_level = APP_LEVEL_PACKAGES
+    excluded: frozenset[str] = frozenset()
     if args.app_root is not None:
         app_root = pathlib.Path(args.app_root)
         if not app_root.is_dir():
@@ -103,11 +117,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not extra:
                 parser.error("--app-level: no package names given")
             app_level = APP_LEVEL_PACKAGES | extra
+        if args.exclude is not None:
+            excluded = frozenset(n.strip() for n in args.exclude.split(",") if n.strip())
+            if not excluded:
+                parser.error("--exclude: no package names given")
+            overlap = sorted(excluded & app_level)
+            if overlap:
+                parser.error(
+                    f"--exclude: {', '.join(overlap)} already declared app-level — "
+                    "a package is plumbing or excluded, never both"
+                )
 
     paths: list[str] = args.paths or ([str(app_root)] if app_root is not None else ["."])
-    findings, errors = run_paths(paths)
+    findings, errors = run_paths(paths, exclude_top=excluded)
     if app_root is not None:
-        errors.extend(totality_errors(app_root, classify_root(app_root, app_level), app_level))
+        errors.extend(
+            totality_errors(
+                app_root, classify_root(app_root, app_level, excluded), app_level
+            )
+        )
     if selected is not None:
         findings = [f for f in findings if f.code in selected]
     if ignored:

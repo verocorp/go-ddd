@@ -40,30 +40,52 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class EmailAddress:
-    value: str
+    _value: str           # hidden — the primitive never leaks (TB010)
 
     def __post_init__(self) -> None:
-        if "@" not in self.value:
-            raise ValueError(f"invalid email address: {self.value!r}")
+        if "@" not in self._value:
+            raise ValueError(f"invalid email address: {self._value!r}")
 
     def __str__(self) -> str:
-        return self.value
+        return self._value
 ```
 
 `frozen=True` gives immutability (assignment raises) and a field-wise
 `__eq__`/`__hash__`. `__post_init__` is the **single validation site**: it
 runs on every construction path, so an invalid instance is unrepresentable —
-there is no bypassable factory.
+there is no bypassable factory. The field is **hidden and stays hidden**: a
+leaf value object gets **no accessor at all** — no public field, no `value`
+property handing the raw string back (a passthrough accessor is the same
+leak as the public field, and TB010 flags both). `__str__` is the sole
+primitive exit; the serialization edge (repository, wire adapter) unwraps
+with `str(email)` there, never inside the domain.
 
 **Compound (two or more fields):** the primitive-leaf spec is parsed and
 validated on construction; the fields are **hidden** (a value object exposes no
-primitive field — `python.md#TB010`). *REVISIT: the concrete construction
-mechanism for a compound value object is unsettled. An entity takes its spec
-directly in `__init__(self, spec)`; the compound-VO below still routes primitive
-parsing through a factory because a frozen dataclass's auto-generated `__init__`
-takes already-parsed fields, not the spec. Whether a compound VO should instead
-take the spec in a custom `__init__` (dropping the dataclass auto-init) is open —
-see `examples/python/catalog/money.py`.*
+primitive field — `python.md#TB010`), and **each component is exposed — when it
+must be exposed at all — as a value object, never as the raw primitive**
+(maintainer ruling 2026-07-19: `rect.x` returning `"1"` is primitive obsession
+wearing an accessor; `x` and `y` are value objects). *REVISIT (narrowed): which
+construction shape is canonical is still open, but both below are sanctioned and
+the analyzer accepts both. (a) The factory shape — `from_spec` parses, the
+auto-generated `__init__` takes parsed fields, `__post_init__` guards every path
+(`examples/python/catalog/money.py`, shown here). (b) The entity-matching shape —
+`@dataclass(frozen=True, init=False)` with `__init__(self, spec)` assigning via
+`object.__setattr__` (TB003 sanctions exactly this site), the same single door an
+entity has. Shape (b)'s open cost: behavior methods like `add` that rebuild from
+already-parsed values need a private raw path; shape (a)'s open cost: the
+auto-init is a second public door, guarded only by `__post_init__`.*
+
+**Warning — hiding a field breaks keyword construction.** Renaming `amount` to
+`_amount` renames the auto-generated `__init__` parameter, so
+`Money(amount=..., currency=...)` raises `TypeError` at every call site the
+moment you comply with TB010. Don't reach for `Money(_amount=...)` (leaks the
+private name) or positional args (unreadable past two fields) — **route
+construction through the spec** (`Money.from_spec(MoneySpec(...))` / shape (b)'s
+`Money(MoneySpec(...))`), which is the construction path tests should exercise
+anyway. Field data (consumer pilot, 2026-07-19): the field rename itself is
+minutes; the construction-site fallout is the real cost, and spec-routing is the
+shape that survives it.
 
 ```python
 from dataclasses import dataclass
@@ -138,13 +160,24 @@ canonicalized. When callers need different nil-handling, add a variant
 **Rules of the section:**
 
 - `frozen=True` always; no setters, no mutation — behavior methods return new
-  instances.
+  instances. This is total, not domain-scoped: **every dataclass in the tree
+  is frozen** — specs, DTOs, and adapter wire shapes included (TB001). Frozen
+  costs an inert carrier nothing, and a non-frozen dataclass is invisible to
+  the VO classifier, so any scope carve-out would let a would-be domain value
+  hide. A boundary shape that genuinely must mutate declares itself with an
+  inline `# tessercheck:ignore`.
+- **The primitive never escapes** (TB010): no public primitive field, and no
+  passthrough accessor returning one — a leaf VO exposes nothing but
+  `__str__`; a compound VO's components are value objects and are exposed as
+  such. Defensive copy-outs of a collection VO's entries (`as_dict`) remain
+  the sanctioned collection read.
 - No `Must*` twin is needed: construction already raises on invalid input.
   The Go `New/MustNew` split exists because Go returns errors; Python's
   exception IS the panic path — in tests, construct directly with known-valid
   literals.
-- `__str__` is for display only. Never compare domain objects via
-  `str(a) == str(b)`.
+- `__str__` is for display only — and it doubles as the single unwrap point
+  where the serialization edge (repository key, wire adapter) extracts the
+  value. Never compare domain objects via `str(a) == str(b)`.
 
 **Equality — pick the correct path:**
 

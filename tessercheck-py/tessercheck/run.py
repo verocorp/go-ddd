@@ -48,12 +48,17 @@ def run_source(path: str, source: str) -> list[Finding]:
     return check_source(path, source, is_test_path(path))
 
 
-def _iter_py_files(root: str) -> list[str]:
+def _iter_py_files(root: str, exclude_top: frozenset[str] = frozenset()) -> list[str]:
     if os.path.isfile(root):
         return [root]
     found: list[str] = []
+    norm_root = os.path.normpath(root)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if os.path.normpath(dirpath) == norm_root and exclude_top:
+            # Declared exclusions prune only direct children of the given
+            # root — a nested dir sharing an excluded name is untouched.
+            dirnames[:] = [d for d in dirnames if d not in exclude_top]
         for name in filenames:
             if name.endswith(".py"):
                 found.append(os.path.join(dirpath, name))
@@ -63,6 +68,7 @@ def _iter_py_files(root: str) -> list[str]:
 def run_paths(
     paths: list[str],
     is_test: Callable[[str], bool] | None = None,
+    exclude_top: frozenset[str] = frozenset(),
 ) -> tuple[list[Finding], list[str]]:
     """Check every ``.py`` file under ``paths`` as one tree.
 
@@ -78,6 +84,10 @@ def run_paths(
     the meta-test injects ``lambda _: False`` to check a fixture tree as
     domain code.
 
+    ``exclude_top`` prunes direct children of each directory in ``paths`` by
+    name — the CLI's ``--exclude`` (a declared not-a-context package is
+    neither classified by the totality guard nor checked).
+
     Returns (findings, errors) where ``errors`` are human-readable messages for
     files that could not be read or parsed (those files are excluded from the
     registry and the checks, not fatal to the run).
@@ -88,7 +98,7 @@ def run_paths(
     sources: dict[str, str] = {}
     seen: set[str] = set()
     for root in paths:
-        for path in _iter_py_files(root):
+        for path in _iter_py_files(root, exclude_top):
             if path in seen:
                 continue
             seen.add(path)

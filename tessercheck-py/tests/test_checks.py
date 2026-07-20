@@ -73,6 +73,57 @@ def test_setattr_delattr_both_flagged_outside_post_init() -> None:
     assert {f.code for f in check_source("s.py", src, is_test=False)} == {"TB003"}
 
 
+def test_tb003_spec_init_exemption_covers_only_field_setattr() -> None:
+    # The sanctioned site is narrow: __setattr__ of a DECLARED field, inside
+    # __init__, of a class declaring BOTH frozen=True and init=False. __delattr__
+    # in that same __init__ is still mutation and stays flagged.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Name:\n"
+        "    _value: str\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+        "        object.__delattr__(self, '_value')\n"
+    )
+    findings = [f for f in check_source("n.py", src, is_test=False) if f.code == "TB003"]
+    assert len(findings) == 1
+    assert "__delattr__" in findings[0].message
+
+
+def test_tb010_computed_primitive_return_is_not_a_passthrough_accessor() -> None:
+    # The accessor ban targets the bare passthrough (return self._x). A method
+    # that computes is not handing the wrapped representation back.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slug:\n"
+        "    _value: str\n"
+        "    def shouted(self) -> str:\n"
+        "        return self._value.upper()\n"
+    )
+    assert "TB010" not in {f.code for f in check_source("s.py", src, is_test=False)}
+
+
+def test_tb010_accessor_ban_is_a_value_object_rule() -> None:
+    # An entity's bool/str state accessor is TB011/TB012 territory, not TB010 —
+    # the primitive-escape ban keys on the VALUE_OBJECT stereotype.
+    src = (
+        "class Link:\n"
+        "    def __init__(self, id: str, active: bool) -> None:\n"
+        "        self._id = id\n"
+        "        self._active = active\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return isinstance(other, Link) and other._id == self._id\n"
+        "    def __hash__(self) -> int:\n"
+        "        return hash(self._id)\n"
+        "    @property\n"
+        "    def active(self) -> bool:\n"
+        "        return self._active\n"
+    )
+    assert "TB010" not in {f.code for f in check_source("l.py", src, is_test=False)}
+
+
 def test_tb002_exempts_a_spec_row_collection_field() -> None:
     # TB002 is a value-object rule, keyed on classification. A frozen dataclass
     # that is a spec / persistence row (public primitive fields, no validation)

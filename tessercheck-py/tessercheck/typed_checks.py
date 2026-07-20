@@ -5,7 +5,10 @@ key on what a class *is* (``classify.ClassInfo``):
 
 * **TB010** (value objects) — the reinstated ``primitiveaccessor`` and the
   load-bearing spec/VO discriminator: a value object hides its representation, a
-  spec exposes it.
+  spec exposes it. Both leak shapes are flagged: the public primitive field and
+  the passthrough accessor returning the raw primitive (maintainer ruling
+  2026-07-19; the design doc's earlier "safe single-representation accessor"
+  allowance is closed — accessors return value objects).
 * **TB011** (identity objects) — the aggregate/entity defensive-copy rule: an
   accessor must not hand back its backing mutable collection; return a copy so a
   caller cannot mutate the aggregate's internals behind the root's back.
@@ -87,16 +90,48 @@ def check_typed(
 def _check_vo_exposure(
     node: ast.ClassDef, path: str, suppressed: "_Suppressed"
 ) -> list[Finding]:
-    """TB010 — a value object must not expose a public primitive field."""
+    """TB010 — a value object's primitive must not escape: neither as a public
+    primitive field nor through a passthrough accessor that hands the raw
+    value back (``@property def x(self) -> str: return self._x`` is the same
+    leak as ``x: str`` — the rename alone enforces nothing). Components are
+    exposed as value objects; ``__str__`` is the sole primitive exit
+    (display, and unwrapping at the service/repository edge)."""
+    field_types: dict[str, str | None] = {}
+    for member in node.body:
+        if isinstance(member, ast.AnnAssign) and isinstance(member.target, ast.Name):
+            field_types[member.target.id] = _annotation_base(member.annotation)
+
     findings: list[Finding] = []
     for member in node.body:
-        if not (isinstance(member, ast.AnnAssign) and isinstance(member.target, ast.Name)):
-            continue
-        field = member.target.id
-        if field.startswith("_"):
-            continue
-        if _annotation_base(member.annotation) in _PRIMITIVE_TYPES:
-            if suppressed(member.lineno):
+        if isinstance(member, ast.AnnAssign) and isinstance(member.target, ast.Name):
+            field = member.target.id
+            if field.startswith("_"):
+                continue
+            if _annotation_base(member.annotation) in _PRIMITIVE_TYPES:
+                if suppressed(member.lineno):
+                    continue
+                findings.append(
+                    Finding(
+                        path,
+                        member.lineno,
+                        member.col_offset + 1,
+                        "TB010",
+                        f"value object {node.name!r} exposes a public primitive field "
+                        f"{field!r}; hide the representation (underscore-private) — a "
+                        "value object's primitive must not leak",
+                    )
+                )
+        elif isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if member.name.startswith("__") and member.name.endswith("__"):
+                continue
+            returned = _bare_self_field_returned(member)
+            if returned is None:
+                continue
+            ann = member.returns
+            primitive = (
+                _annotation_base(ann) if ann is not None else None
+            ) in _PRIMITIVE_TYPES or field_types.get(returned) in _PRIMITIVE_TYPES
+            if not primitive or suppressed(member.lineno):
                 continue
             findings.append(
                 Finding(
@@ -104,9 +139,11 @@ def _check_vo_exposure(
                     member.lineno,
                     member.col_offset + 1,
                     "TB010",
-                    f"value object {node.name!r} exposes a public primitive field "
-                    f"{field!r}; hide the representation (underscore-private) — a "
-                    "value object's primitive must not leak",
+                    f"value object {node.name!r} accessor {member.name!r} returns "
+                    f"its raw primitive ({returned!r}); the primitive must not "
+                    "leak through an accessor either — expose a value object "
+                    "(wrap the component), and unwrap via __str__ only at the "
+                    "serialization edge",
                 )
             )
     return findings

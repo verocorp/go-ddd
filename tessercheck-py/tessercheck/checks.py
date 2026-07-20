@@ -5,9 +5,19 @@ Most are deliberately *syntactic* — they read the shape of the code:
 
 * **TB001** (frozen) is the gateway: a non-frozen dataclass classifies as
   ``OTHER``, so it *cannot* be keyed on the value-object stereotype (the
-  classifier uses frozen-ness to recognise a VO). It stays a shape check.
+  classifier uses frozen-ness to recognise a VO). It stays a shape check, and
+  its scope is deliberately **total** — every dataclass in non-test code,
+  specs and adapter DTOs included, must be frozen. Frozen costs a DTO
+  nothing, and any stereotype/layer gate would open the exact hole the check
+  exists to close: a would-be domain value hiding from classification by not
+  being frozen. The escape for a genuinely mutable boundary shape is an
+  inline ``# tessercheck:ignore``, a visible declared fact.
 * **TB003** (setattr-bypass) and **TB004** (str-equality) are shape/expression
-  checks with no stereotype dependency.
+  checks with no stereotype dependency. TB003 allows the two construction
+  sites and nothing else: ``__post_init__`` (canonicalization), and the
+  spec-taking ``__init__`` of a ``@dataclass(frozen=True, init=False)`` class
+  assigning its own declared fields — the shape TB013 prescribes, which has
+  no other way to assign fields.
 * **TB002** (hash-hazard) is the exception — it is **classification-aware**: the
   "back a collection with a tuple" rule is a *value-object* rule, so it fires
   only on a class classified ``VALUE_OBJECT``. A frozen dataclass that is really
@@ -17,7 +27,12 @@ Most are deliberately *syntactic* — they read the shape of the code:
 
 import ast
 
-from tessercheck.astutil import _annotation_base, _dataclass_frozen, _is_str_call
+from tessercheck.astutil import (
+    _annotation_base,
+    _dataclass_frozen,
+    _dataclass_init_false,
+    _is_str_call,
+)
 from tessercheck.classify import ClassInfo, Stereotype, classify_trees
 from tessercheck.comments_check import check_comments
 from tessercheck.finding import Finding
@@ -61,6 +76,9 @@ class _Checker(ast.NodeVisitor):
         self._is_test = is_test
         self._registry = registry
         self._func_stack: list[str] = []
+        # (declares frozen=True AND init=False, declared field names) per
+        # enclosing class — what the TB003 spec-__init__ exemption keys on.
+        self._class_stack: list[tuple[bool, frozenset[str]]] = []
         self.findings: list[Finding] = []
 
     def _is_value_object(self, name: str) -> bool:
@@ -86,16 +104,35 @@ class _Checker(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         is_dc, frozen, dec = _dataclass_frozen(node.decorator_list)
         if is_dc and not frozen and not self._is_test and dec is not None:
-            # TB001 — a mutable dataclass modeling a domain value.
+            # TB001 — deliberately total: every dataclass, not just domain
+            # values. Frozen costs a spec/DTO nothing, and a stereotype gate
+            # would let a would-be domain value hide from classification by
+            # staying non-frozen (the classifier keys VOs on frozen-ness).
             self._emit(
                 dec,
                 "TB001",
-                f"dataclass {node.name!r} is not frozen; domain values must be "
-                "@dataclass(frozen=True) (immutability + value equality)",
+                f"dataclass {node.name!r} is not frozen; every dataclass is "
+                "@dataclass(frozen=True) here — a domain value for "
+                "immutability + value equality, a spec/DTO because frozen "
+                "costs it nothing and a non-frozen dataclass is invisible to "
+                "the VO classifier (annotate '# tessercheck:ignore' for a "
+                "boundary shape that genuinely must mutate)",
             )
         if is_dc and frozen and not self._is_test:
             self._check_hashable_fields(node)
-        self.generic_visit(node)
+        fields = frozenset(
+            stmt.target.id
+            for stmt in node.body
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+        )
+        spec_init_shape = (
+            is_dc and frozen and _dataclass_init_false(node.decorator_list)
+        )
+        self._class_stack.append((spec_init_shape, fields))
+        try:
+            self.generic_visit(node)
+        finally:
+            self._class_stack.pop()
 
     def _check_hashable_fields(self, node: ast.ClassDef) -> None:
         # TB002 — a value-object rule: back a collection with a tuple/frozenset.
@@ -135,8 +172,12 @@ class _Checker(ast.NodeVisitor):
             self._func_stack.pop()
 
     def visit_Call(self, node: ast.Call) -> None:
-        # TB003 — object.__setattr__/__delattr__ bypassing frozen immutability,
-        # allowed only inside __post_init__ (construction-time canonicalization).
+        # TB003 — object.__setattr__/__delattr__ bypassing frozen immutability.
+        # Two construction sites are sanctioned: __post_init__ (canonicalization)
+        # and the spec-taking __init__ of a frozen init=False dataclass assigning
+        # its own declared fields — that shape has no other way in. Everything
+        # else (any ordinary method, __delattr__ anywhere, a non-field name) is
+        # post-construction mutation and stays flagged.
         func = node.func
         if (
             isinstance(func, ast.Attribute)
@@ -145,14 +186,41 @@ class _Checker(ast.NodeVisitor):
             and func.value.id == "object"
             and not self._is_test
             and "__post_init__" not in self._func_stack
+            and not self._is_spec_init_assignment(node, func.attr)
         ):
             self._emit(
                 node,
                 "TB003",
                 f"object.{func.attr} bypasses frozen immutability outside "
-                "__post_init__; a value object never mutates after construction",
+                "__post_init__ or the spec-taking __init__ of a "
+                "@dataclass(frozen=True, init=False); a value object never "
+                "mutates after construction",
             )
         self.generic_visit(node)
+
+    def _is_spec_init_assignment(self, node: ast.Call, attr: str) -> bool:
+        """The sanctioned construction write: ``object.__setattr__(self, "x", ...)``
+        directly inside ``__init__`` of a ``@dataclass(frozen=True, init=False)``
+        class, where ``"x"`` is one of that class's declared fields."""
+        if attr != "__setattr__":
+            return False
+        if not (self._func_stack and self._func_stack[-1] == "__init__"):
+            return False
+        if not self._class_stack:
+            return False
+        spec_init_shape, fields = self._class_stack[-1]
+        if not spec_init_shape:
+            return False
+        if len(node.args) < 2:
+            return False
+        target, name = node.args[0], node.args[1]
+        return (
+            isinstance(target, ast.Name)
+            and target.id == "self"
+            and isinstance(name, ast.Constant)
+            and isinstance(name.value, str)
+            and name.value in fields
+        )
 
     def visit_Compare(self, node: ast.Compare) -> None:
         # TB004 — equality by string representation. Fire only when the

@@ -21,6 +21,11 @@ layout; assumptions parameterized, not copied):
 * The app-level set defaults to the template's mandatory top dirs
   (``bootstrap``, ``srv``, ``tests``); a consumer extends it explicitly
   (CLI ``--app-level``) — an extension is a declared fact, not an inference.
+* A declared exclusion (CLI ``--exclude``) removes a root-level package from
+  classification *and* from the checked file set: for scratch/demo packages
+  that will never be contexts, and for contexts not yet adopted — the
+  incremental-adoption ratchet. The guard's exit-2 teeth stay total over
+  everything not explicitly declared.
 * ``__init__.py`` that is missing or unparsable does NOT exempt a package:
   it classifies as unclassified (a namespace package cannot hide).
 * An app root with zero discovered contexts is itself a failure — every app
@@ -95,19 +100,28 @@ def _is_python_package_dir(path: pathlib.Path) -> bool:
 def classify_root(
     root: pathlib.Path,
     app_level: frozenset[str] = APP_LEVEL_PACKAGES,
+    exclude: frozenset[str] = frozenset(),
 ) -> Discovery:
     """Classify every root-level package dir of an app root.
 
     App-level pieces are recognized by name; a context by its ``Client``;
     everything else lands in ``unclassified`` — the totality guard
     (:func:`totality_errors`) asserts that bucket is empty.
+
+    ``exclude`` is the declared not-a-context set (CLI ``--exclude``): scratch
+    and demo packages that will never be contexts, or real contexts not yet
+    adopted (the adoption ratchet — drive the list to zero). Distinct from
+    ``app_level``, which asserts the package IS the app's plumbing; an
+    exclusion asserts only "the guard does not classify this, on my say-so".
+    Excluded packages are skipped entirely — never counted as contexts even
+    when they expose a ``Client``.
     """
     contexts: list[str] = []
     unclassified: list[str] = []
     for path in sorted(root.iterdir()):
         if not path.is_dir() or path.name.startswith(".") or path.name in SKIP_DIRS:
             continue
-        if path.name in app_level:
+        if path.name in app_level or path.name in exclude:
             continue
         if not _is_python_package_dir(path):
             continue
@@ -129,13 +143,26 @@ def totality_errors(
     unclassified package, plus the no-contexts failure for an app root where
     discovery found nothing to check.
     """
-    errors = [
-        f"{root / name}: unclassified root-level package — a bounded context "
-        f"must expose Client from {name}/__init__.py "
-        "(skills/tesser-build/public-interface.md); app-level plumbing must "
-        f"be one of {', '.join(sorted(app_level))} (extend with --app-level)"
-        for name in discovery.unclassified
-    ]
+    errors: list[str] = []
+    for name in discovery.unclassified:
+        if (root / name / "client.py").is_file():
+            errors.append(
+                f"{root / name}: {name}/client.py exists but "
+                f"{name}/__init__.py does not re-export Client — add "
+                f"'from {name}.client import Client' to {name}/__init__.py "
+                "(skills/tesser-build/public-interface.md); the seam is "
+                "discovered through the package top level only"
+            )
+        else:
+            errors.append(
+                f"{root / name}: unclassified root-level package — a bounded "
+                f"context must expose Client from {name}/__init__.py "
+                "(skills/tesser-build/public-interface.md); app-level "
+                f"plumbing must be one of {', '.join(sorted(app_level))} "
+                "(extend with --app-level); a package that is not a context "
+                "at all (scratch, demo, not yet adopted) is declared with "
+                "--exclude"
+            )
     if not discovery.contexts and not discovery.unclassified:
         errors.append(
             f"{root}: no bounded contexts discovered — every app root has at "

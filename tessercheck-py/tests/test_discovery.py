@@ -255,3 +255,82 @@ def test_cli_explicit_paths_scope_checks_but_discovery_still_total(
     err = capsys.readouterr().err
     assert rc == 2
     assert "reports" in err
+
+
+def test_totality_error_distinguishes_unexported_client(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A context whose client.py exists but is not re-exported gets the
+    precise three-line fix, not the generic "unclassified" message —
+    "you have no seam" and "your seam isn't surfaced" are different defects."""
+    _pkg(tmp_path, "clinical", "")
+    (tmp_path / "clinical" / "client.py").write_text(
+        "from typing import Protocol\n\nclass Client(Protocol):\n    def ping(self) -> None: ...\n",
+        encoding="utf-8",
+    )
+    errors = totality_errors(tmp_path, classify_root(tmp_path))
+    assert len(errors) == 1
+    assert "does not re-export Client" in errors[0]
+    assert "from clinical.client import Client" in errors[0]
+    assert "unclassified" not in errors[0]
+
+
+def test_classify_root_exclude_skips_declared_packages(
+    tmp_path: pathlib.Path,
+) -> None:
+    _pkg(tmp_path, "billing", "from billing.client import Client\n")
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    _pkg(tmp_path, "demo_api", "x = 1\n")
+    assert classify_root(tmp_path).unclassified == ("demo_api", "spikes")
+    d = classify_root(tmp_path, exclude=frozenset({"spikes", "demo_api"}))
+    assert d.contexts == ("billing",)
+    assert d.unclassified == ()
+
+
+def test_classify_root_exclude_skips_even_a_client_bearing_package(
+    tmp_path: pathlib.Path,
+) -> None:
+    """An exclusion is total: an excluded package never counts as a context,
+    so excluding your only context trips the no-contexts failure loudly."""
+    _pkg(tmp_path, "billing", "from billing.client import Client\n")
+    d = classify_root(tmp_path, exclude=frozenset({"billing"}))
+    assert d.contexts == () and d.unclassified == ()
+    errors = totality_errors(tmp_path, d)
+    assert len(errors) == 1 and "no bounded contexts" in errors[0]
+
+
+def test_cli_exclude_declares_scratch_out_of_guard_and_checks(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _good_tree(tmp_path)
+    _pkg(tmp_path, "spikes", "x = 1\n")
+    (tmp_path / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    assert main(["--app-root", str(tmp_path)]) == 2
+    capsys.readouterr()
+    rc = main(["--app-root", str(tmp_path), "--exclude", "spikes"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "spikes" not in captured.out and captured.err == ""
+
+
+def test_cli_exclude_requires_app_root(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--exclude", "spikes", str(tmp_path)])
+    assert exc.value.code == 2
+
+
+def test_cli_exclude_blank_value_is_usage_error(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--app-root", str(tmp_path), "--exclude", " , "])
+    assert exc.value.code == 2
+
+
+def test_cli_exclude_overlapping_app_level_is_usage_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--app-root", str(tmp_path), "--app-level", "scripts", "--exclude", "scripts"])
+    assert exc.value.code == 2
