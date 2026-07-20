@@ -1,4 +1,4 @@
-from catalog.money import MoneySpec
+from catalog.money import Money, MoneySpec
 from catalog.product import Product, ProductSpec
 from catalog.sku import SKU
 
@@ -14,7 +14,7 @@ def _spec() -> ProductSpec:
 def test_construction() -> None:
     p = Product(_spec())
     assert p.sku == SKU("TSHIRT-BLK-M")
-    assert str(p.price) == "19.99 USD"
+    assert p.price == Money(MoneySpec(amount="19.99", currency="USD"))
     assert p.labels.get("color") == "black"
 
 
