@@ -1,7 +1,6 @@
 # Norm: serialization
 
 <!-- tb-status: full -->
-<!-- tb-allow-missing: examples/python-app/campaign/application/parts.py -->
 
 **A domain object never serializes itself, and its primitives leave through
 exactly one door per shape.** This norm is scoped to the domain data types —

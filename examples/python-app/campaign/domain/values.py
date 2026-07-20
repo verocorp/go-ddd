@@ -7,6 +7,19 @@ from urllib.parse import urlparse
 from errors import invalid
 
 _SLUG_RE = re.compile(r"[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?")
+_CAMPAIGN_ID_RE = re.compile(r"[a-f0-9]{16}")
+
+
+@dataclass(frozen=True)
+class CampaignID:
+    _value: str
+
+    def __post_init__(self) -> None:
+        if not _CAMPAIGN_ID_RE.fullmatch(self._value):
+            raise invalid("invalid_campaign_id", f"campaign id {self._value!r} must be 16 lowercase hex chars")
+
+    def __str__(self) -> str:
+        return self._value
 
 
 @dataclass(frozen=True)

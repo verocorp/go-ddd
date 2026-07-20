@@ -516,9 +516,9 @@ class Config:
 
 
 # <context>/wiring/wire.py — coordinate-driven, fail-fast, uniform seam
-def repo_for(cfg: Config) -> tuple[LinkRepository, Closeable]:
+def repo_for(cfg: Config) -> tuple[CampaignRepository, Closeable]:
     if cfg.storage == "memory":
-        repo = InMemoryLinkRepository()
+        repo = InMemoryCampaignRepository()
         return repo, repo
     if not cfg.storage:
         raise invalid("missing_coordinate", "campaign storage coordinate is required")
@@ -597,14 +597,15 @@ class Handler:
     def __init__(self, client: Client) -> None:
         self._client = client                       # injected; never constructed
 
-    def create_link(self, raw: str) -> Response:
+    def add_link(self, raw: str) -> Response:
         def run() -> Response:
             body = _parse(raw)                      # wire guard, field by field
-            resp = self._client.create_link(
-                CreateLinkRequest(slug=_str(body.get("slug")),
-                                  target_url=_str(body.get("target_url")))
+            view = self._client.add_link(
+                AddLinkRequest(campaign_id=_str(body.get("campaign_id")),
+                               slug=_str(body.get("slug")),
+                               target_url=_str(body.get("target_url")))
             )
-            return Response(201, {"slug": resp.slug, "target_url": resp.target_url})
+            return Response(200, _campaign_body(view))  # DTO -> wire, the edge's own shape
 
         return self._respond(run)
 
