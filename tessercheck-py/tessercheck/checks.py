@@ -76,9 +76,12 @@ class _Checker(ast.NodeVisitor):
         self._is_test = is_test
         self._registry = registry
         self._func_stack: list[str] = []
-        # (declares frozen=True AND init=False, declared field names) per
-        # enclosing class — what the TB003 spec-__init__ exemption keys on.
-        self._class_stack: list[tuple[bool, frozenset[str]]] = []
+        # (declares frozen=True AND init=False, declared field names, function
+        # depth at class entry) per enclosing class — what the TB003
+        # spec-__init__ exemption keys on. The depth pins the exemption to a
+        # DIRECT class-body __init__: a nested def named __init__ sits deeper
+        # than depth+1 and never inherits it.
+        self._class_stack: list[tuple[bool, frozenset[str], int]] = []
         self.findings: list[Finding] = []
 
     def _is_value_object(self, name: str) -> bool:
@@ -120,15 +123,19 @@ class _Checker(ast.NodeVisitor):
             )
         if is_dc and frozen and not self._is_test:
             self._check_hashable_fields(node)
+        # ClassVar/InitVar annotations are not instance fields to the dataclass
+        # machinery, so they are not sanctioned setattr targets either.
         fields = frozenset(
             stmt.target.id
             for stmt in node.body
-            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+            if isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and _annotation_base(stmt.annotation) not in {"ClassVar", "InitVar"}
         )
         spec_init_shape = (
             is_dc and frozen and _dataclass_init_false(node.decorator_list)
         )
-        self._class_stack.append((spec_init_shape, fields))
+        self._class_stack.append((spec_init_shape, fields, len(self._func_stack)))
         try:
             self.generic_visit(node)
         finally:
@@ -171,6 +178,16 @@ class _Checker(ast.NodeVisitor):
         finally:
             self._func_stack.pop()
 
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        # A lambda is its own function frame: a setattr inside a lambda defined
+        # in __init__ runs POST-construction (whenever the lambda is called),
+        # so it must never inherit the spec-__init__ exemption.
+        self._func_stack.append("<lambda>")
+        try:
+            self.generic_visit(node)
+        finally:
+            self._func_stack.pop()
+
     def visit_Call(self, node: ast.Call) -> None:
         # TB003 — object.__setattr__/__delattr__ bypassing frozen immutability.
         # Two construction sites are sanctioned: __post_init__ (canonicalization)
@@ -200,16 +217,19 @@ class _Checker(ast.NodeVisitor):
 
     def _is_spec_init_assignment(self, node: ast.Call, attr: str) -> bool:
         """The sanctioned construction write: ``object.__setattr__(self, "x", ...)``
-        directly inside ``__init__`` of a ``@dataclass(frozen=True, init=False)``
-        class, where ``"x"`` is one of that class's declared fields."""
+        directly inside the class-body ``__init__`` of a
+        ``@dataclass(frozen=True, init=False)`` class, where ``"x"`` is one of
+        that class's declared instance fields. "Directly" is enforced by frame
+        depth: the ``__init__`` must be the single function frame above the
+        class entry — a nested def or lambda never inherits the exemption."""
         if attr != "__setattr__":
             return False
         if not (self._func_stack and self._func_stack[-1] == "__init__"):
             return False
         if not self._class_stack:
             return False
-        spec_init_shape, fields = self._class_stack[-1]
-        if not spec_init_shape:
+        spec_init_shape, fields, depth = self._class_stack[-1]
+        if not spec_init_shape or len(self._func_stack) != depth + 1:
             return False
         if len(node.args) < 2:
             return False

@@ -362,6 +362,40 @@ def test_cli_exclude_overlapping_app_level_is_usage_error(
     assert exc.value.code == 2
 
 
+def test_cli_exclusion_is_anchored_to_the_app_root_not_the_scanned_root(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Scanning from a PARENT of the app root must still prune the excluded
+    package, and an explicitly-scanned context must keep a nested namesake —
+    exclusions are absolute directory identities, not per-root child names
+    (adversarial round 2: name-relative pruning got both cases wrong)."""
+    app = tmp_path / "app"
+    app.mkdir()
+    _good_tree(app)
+    _pkg(app, "spikes", "x = 1\n")
+    (app / "spikes" / "scratch.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Draft:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(["--app-root", str(app), "--exclude", "spikes", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "scratch.py" not in captured.out
+
+    nested = app / "billing" / "spikes"
+    nested.mkdir()
+    (nested / "leaky.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Nested:\n    x: int\n",
+        encoding="utf-8",
+    )
+    rc = main(
+        ["--app-root", str(app), "--exclude", "spikes", str(app / "billing")]
+    )
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "leaky.py" in captured.out
+
+
 def test_cli_exclude_wins_over_an_explicit_positional_path(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

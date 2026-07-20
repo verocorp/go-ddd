@@ -417,14 +417,20 @@ def _bare_self_field_returned(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str
 
     if len(body) == 1 and isinstance(body[0], ast.Return):
         return self_attr(body[0].value)
-    if (
-        len(body) == 2
-        and isinstance(body[0], ast.Assign)
-        and len(body[0].targets) == 1
-        and isinstance(body[0].targets[0], ast.Name)
-        and isinstance(body[1], ast.Return)
-        and isinstance(body[1].value, ast.Name)
-        and body[1].value.id == body[0].targets[0].id
-    ):
-        return self_attr(body[0].value)
+    if len(body) == 2 and isinstance(body[1], ast.Return) and isinstance(body[1].value, ast.Name):
+        first = body[0]
+        if (
+            isinstance(first, ast.Assign)
+            and len(first.targets) == 1
+            and isinstance(first.targets[0], ast.Name)
+            and body[1].value.id == first.targets[0].id
+        ):
+            return self_attr(first.value)
+        if (
+            isinstance(first, ast.AnnAssign)
+            and isinstance(first.target, ast.Name)
+            and first.value is not None
+            and body[1].value.id == first.target.id
+        ):
+            return self_attr(first.value)
     return None

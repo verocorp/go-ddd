@@ -1,6 +1,7 @@
 """``python -m tessercheck`` — run the checks over paths, print flake8-style."""
 
 import argparse
+import os
 import pathlib
 import sys
 from collections.abc import Sequence
@@ -147,15 +148,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
     paths: list[str] = args.paths or ([str(app_root)] if app_root is not None else ["."])
+    exclude_paths: frozenset[str] = frozenset()
     if app_root is not None and excluded:
-        # The exclusion wins over an explicitly-passed path too — otherwise
-        # "--exclude spikes app/spikes" would scan the very package the user
-        # declared out, and discovery and the checks would disagree.
+        # The exclusion is anchored to the APP ROOT as absolute directory
+        # identities, and it wins over an explicitly-passed path too —
+        # otherwise "--exclude spikes app/spikes" would scan the very package
+        # the user declared out, and discovery and the checks would disagree.
+        exclude_paths = frozenset(
+            os.path.normpath(os.path.abspath(str(app_root / name))) for name in excluded
+        )
         dropped = [p for p in paths if _under_excluded(p, app_root, excluded)]
         paths = [p for p in paths if p not in dropped]
         for p in dropped:
             print(f"{p}: skipped — inside a package declared with --exclude", file=sys.stderr)
-    findings, errors = run_paths(paths, exclude_top=excluded)
+    findings, errors = run_paths(paths, exclude_paths=exclude_paths)
     if app_root is not None:
         errors.extend(
             totality_errors(

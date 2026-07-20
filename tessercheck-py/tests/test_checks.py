@@ -457,6 +457,79 @@ def test_tb003_truthy_falsy_dataclass_flags_match_runtime_semantics() -> None:
     assert "TB001" not in {f.code for f in check_source("r.py", frozen_truthy, is_test=False)}
 
 
+def test_tb003_lambda_inside_spec_init_never_inherits_the_exemption() -> None:
+    # A lambda defined in __init__ runs POST-construction; a setattr in its
+    # body is deferred mutation, not a construction write (adversarial
+    # round 2: the lambda body previously saw __init__ as the innermost
+    # frame and slipped through).
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Name:\n"
+        "    _value: str\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+        "        f = lambda v: object.__setattr__(self, '_value', v)\n"
+        "        f(value)\n"
+    )
+    findings = [f for f in check_source("n.py", src, is_test=False) if f.code == "TB003"]
+    assert [f.line for f in findings] == [7]
+
+
+def test_tb003_nested_def_named_init_never_inherits_the_exemption() -> None:
+    # The exemption is pinned to the DIRECT class-body __init__ by frame
+    # depth; a nested def that happens to be named __init__ is an ordinary
+    # inner function and stays flagged.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Name:\n"
+        "    _value: str\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+        "        def __init__(v: str) -> None:\n"
+        "            object.__setattr__(self, '_value', v)\n"
+        "        __init__(value)\n"
+    )
+    findings = [f for f in check_source("n.py", src, is_test=False) if f.code == "TB003"]
+    assert [f.line for f in findings] == [8]
+
+
+def test_tb003_classvar_is_not_a_sanctioned_setattr_target() -> None:
+    # ClassVar/InitVar annotations are not dataclass instance fields, so
+    # writing one via object.__setattr__ in the spec-init is not the
+    # sanctioned construction write.
+    src = (
+        "from dataclasses import dataclass\n"
+        "from typing import ClassVar\n"
+        "@dataclass(frozen=True, init=False)\n"
+        "class Name:\n"
+        "    _value: str\n"
+        "    _registry: ClassVar[str] = ''\n"
+        "    def __init__(self, value: str) -> None:\n"
+        "        object.__setattr__(self, '_value', value)\n"
+        "        object.__setattr__(self, '_registry', value)\n"
+    )
+    findings = [f for f in check_source("n.py", src, is_test=False) if f.code == "TB003"]
+    assert [f.line for f in findings] == [9]
+
+
+def test_tb010_annotated_alias_passthrough_is_still_a_passthrough() -> None:
+    # `v: str = self._x; return v` — the typed-code spelling of the alias
+    # disguise — is peeled the same as the bare assignment.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Slot:\n"
+        "    _key: str\n"
+        "    def key(self) -> str:\n"
+        "        v: str = self._key\n"
+        "        return v\n"
+    )
+    findings = [f for f in check_source("s.py", src, is_test=False) if f.code == "TB010"]
+    assert len(findings) == 1
+
+
 def test_tb003_hand_written_init_without_init_false_declaration_stays_flagged() -> None:
     # The exemption requires the DECLARED shape. A frozen dataclass with a
     # hand-written __init__ but no init=False keyword is nudged to declare it —
