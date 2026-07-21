@@ -37,15 +37,21 @@ from tessercheck.finding import Finding
 # A predicate over 1-based line numbers: is a ``# tessercheck:ignore`` on that line?
 _Suppressed = Callable[[int], bool]
 
-# Base names that are raw primitives a value object must not expose — neither
-# as a public field nor through a passthrough accessor (the 2026-07-19 ruling
-# closed the earlier "safe single-representation accessor" allowance: a
-# currency code is a Currency VO). A multi-representation primitive (Decimal)
-# is likewise wrapped in its own VO; a leaf's canonical conversion exit
-# (2026-07-20 ruling: the ONE dunder matching its backing primitive —
-# skills/tesser-build/serialization.md rule 3) is the sole primitive door.
+# The scalar representations a domain type must not expose raw — "primitive" in
+# the DDD (primitive-obsession) sense, so the stdlib temporals count, not only
+# the language builtins. ONE set answers two faces of the same question: which
+# scalars a leaf value object wraps (leaf-vs-structured discrimination) and which
+# a domain type must not hand out raw (the TB010 accessor ban + the TB016
+# compound-field ban). They are the same category — every wrappable scalar is a
+# must-wrap representation and vice versa — so they are one set, not two
+# (maintainer ruling 2026-07-20, collapsing the transient _SCALAR_TYPES split
+# that the temporal-type ruling had forced open). A currency code is a Currency
+# VO, a Decimal is its own VO, a date is a Day VO; a leaf's canonical conversion
+# exit (serialization.md rule 3) is the sole door back out. What is NOT here is
+# what makes a single-field class structured instead of a leaf: a collection
+# field (``tuple[Label, ...]``) or a field typed as another domain object.
 _PRIMITIVE_TYPES: frozenset[str] = frozenset(
-    {"str", "int", "float", "bool", "bytes", "complex", "Decimal"}
+    {"str", "int", "float", "bool", "bytes", "complex", "Decimal", "date", "datetime", "time"}
 )
 
 # Collection bases whose instance a caller can mutate. Handing back the backing
@@ -67,30 +73,25 @@ _CONVERSION_DUNDERS: frozenset[str] = frozenset(
     {"__str__", "__int__", "__float__", "__bytes__"}
 )
 
-# Scalar representation types a leaf value object may wrap. Deliberately broader
-# than the ruled canonical exits below: a leaf backed by a scalar the norm has
-# not yet ruled on (``date`` today) is still a *leaf* — its exit is simply out
-# of contract and left unchecked, never mistaken for a structured type. What is
-# NOT here is what makes a single-field class structured: a collection field
-# (``tuple[Label, ...]`` — a collection value object, zero dunders) or a field
-# typed as another domain object.
-_SCALAR_TYPES: frozenset[str] = frozenset(
-    {"str", "int", "float", "bool", "bytes", "complex", "Decimal", "date", "datetime", "time"}
-)
-
-# The subset of scalars with a *ruled* canonical exit. The four native
-# primitives map to their own conversion protocol; the representations without
-# one (Decimal, datetime) exit as canonical text under the pinned policies, so
-# their exit is __str__. A leaf backed by a scalar absent here (``date``, and
-# the never-a-leaf ``bool``/``complex``) has no ruled exit yet — its dunder, if
-# any, is out of contract and left alone rather than guessed at.
+# The subset of _PRIMITIVE_TYPES with a *ruled* canonical exit — a proper subset,
+# not a match. The four native primitives map to their own conversion protocol;
+# the representations without one (Decimal, date, datetime, time) exit as
+# canonical text via __str__ under the pinned policies (serialization.md rule 3).
+# The gap from _PRIMITIVE_TYPES is exactly {bool, complex}: they are must-wrap
+# (a compound VO must not hold one raw) but the norm has defined no canonical
+# leaf exit for them, so a leaf backed by one has its dunder left alone rather
+# than guessed at. Whether bool/complex should be must-wrap at all, and if so
+# what their exit is, is a separate open question (TODOS.md) inherited from the
+# original public-field set.
 _CANONICAL_EXIT: dict[str, str] = {
     "str": "__str__",
     "int": "__int__",
     "float": "__float__",
     "bytes": "__bytes__",
     "Decimal": "__str__",
+    "date": "__str__",
     "datetime": "__str__",
+    "time": "__str__",
 }
 
 
@@ -117,15 +118,16 @@ def _leaf_backing(node: ast.ClassDef) -> str | None:
     at all. This is the discriminator the norm's "a leaf has exactly one
     matching conversion dunder; a structured type has none" contract rests on.
 
-    Membership is keyed on :data:`_SCALAR_TYPES`, NOT on the ruled-exit table:
-    a ``date``-backed single field is a leaf even though the norm has not ruled
-    its exit, so its legitimate ``__str__`` is never mistaken for a compound's.
+    Membership is keyed on :data:`_PRIMITIVE_TYPES` (leaf-eligibility and
+    must-wrap are the same category), NOT on the ruled-exit table: a leaf backed
+    by a scalar whose exit the norm has not ruled (``bool``) is still a leaf, so
+    a stray dunder on it is left alone rather than mistaken for a compound's.
     """
     fields = _fields(node)
     if len(fields) != 1:
         return None
     base = _annotation_base(fields[0].annotation)
-    return base if base in _SCALAR_TYPES else None
+    return base if base in _PRIMITIVE_TYPES else None
 
 
 def _defined_conversion_dunders(node: ast.ClassDef) -> list[ast.FunctionDef]:

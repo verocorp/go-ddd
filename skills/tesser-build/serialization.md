@@ -164,16 +164,17 @@ belongs to the edge, recorded where its golden test lives.
   decided mechanically: exactly one field annotated with a bare scalar is a
   leaf; anything else — two or more fields, a collection field, a field typed
   as another domain object — is structured. A leaf backed by a scalar the
-  norm has not yet ruled an exit for (`date` today) is still a leaf, so its
-  legitimate canonical `__str__` is left alone rather than mistaken for a
-  structured type's dunder.
+  norm has not ruled an exit for (`bool`) is still a leaf, so a stray dunder
+  on it is left alone rather than mistaken for a structured type's.
 - **TB016** (the compound-raw-primitive check) flags rule 5's internal
-  half: a multi-field VO holding bare primitives instead of child VOs.
-  Backing types the norm has not ruled on (`bool`, `complex`, `UUID`,
-  `Enum`) are out of contract rather than guessed at. `date`/`datetime`/
-  `time` are a deliberate under-reach — the temporal-type ruling that would
-  bring them under TB010/TB016 is a maintainer call (`TODOS.md`), because it
-  widens the consumer-facing accessor ban.
+  half: a multi-field VO holding bare primitives instead of child VOs. The
+  must-wrap set is "primitive" in the DDD sense — the language scalars plus
+  the stdlib temporals (`date`/`datetime`/`time`), which a compound must wrap
+  in child VOs just like a `Decimal` (maintainer ruling 2026-07-20). A
+  `date`-backed leaf exits as canonical text via `__str__`. The residual gap
+  is `bool`/`complex`: must-wrap, but with no ruled leaf exit — a separate
+  open question (`TODOS.md`). Types with no stereotype meaning at all
+  (`UUID`, `Enum`) stay out of contract rather than guessed at.
 - The **parts import boundary** (adapters consume parts, not domain types,
   outbound) is a named deferred check; until it ships, rule 7 is
   review-enforced. Honest gap, stated.

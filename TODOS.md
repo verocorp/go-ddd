@@ -104,39 +104,27 @@ Deferred work with context. Each entry carries enough for a cold pickup.
   - **Trigger:** a measured performance problem in a real consumer, not
     aesthetics.
 
-- [ ] **date/datetime/time as representation types — a maintainer ruling**
-  (opened 2026-07-20, found while building TB015/TB016; MAINTAINER CALL)
-  - **What:** two checker tables decide how the temporal types are treated.
-    `_PRIMITIVE_TYPES` (`{str, int, float, bool, bytes, complex, Decimal}`)
-    drives TB010 (an accessor must not return a raw primitive) and TB016 (a
-    compound must not hold one). `_CANONICAL_EXIT` (`{str, int, float, bytes,
-    Decimal, datetime}`) drives TB015's leaf-exit check. `date` and `time`
-    are in NEITHER; `datetime` is in `_CANONICAL_EXIT` (it has a pinned
-    canonical-text policy in the norm) but NOT `_PRIMITIVE_TYPES`. The result:
-    a compound holding a raw `date`, or an accessor returning one, is not
-    flagged. A third table, `_SCALAR_TYPES`, DOES already list all three — it
-    is the leaf-vs-structured discriminator, deliberately broad so a
-    `date`-backed leaf is never mistaken for a compound (that correctness fix
-    shipped with C1). What is a ruling, not a bug, is whether the temporal
-    types join `_PRIMITIVE_TYPES` + `_CANONICAL_EXIT`.
-  - **The ruling:** should `date`/`datetime`/`time` be representation types the
-    norm requires wrapping — i.e. a compound holding one must give it a child
-    VO (TB016), an accessor must not hand a raw one back (TB010), and a
-    date-backed leaf must exit via `__str__` canonical text (TB015)? They are
-    the same family as `Decimal`/`datetime`, which the norm already covers.
-  - **Measured blast radius (2026-07-20):** adding all three to
-    `_PRIMITIVE_TYPES` leaves `examples/python`, `examples/python-app` and
-    `examples/serdepy` clean and the full suite green — the entire in-repo
-    effect is `examples/errorspy`'s `DateWindow` (2 TB016 + 2 TB010 on its
-    raw-`date` bounds). errorspy is already swept for everything else, so
-    executing the ruling = wrap those two bounds in a `Day` leaf VO
-    (`date`-backed, `__str__` canonical-text exit) + add `date`/`time` to
-    `_CANONICAL_EXIT`, in one change.
-  - **Why the maintainer, not a checker PR:** it widens **TB010**, a shipped
-    consumer-facing check with an `--exclude` adoption ratchet — a consumer's
-    `date`-typed accessor would begin failing. Same class of norm-strengthening
-    ruling as the 2026-07-19 accessor-primitive ban. Do it as its own small
-    ruling + PR (or fold into C2) so the ratchet event is legible in history.
+- [ ] **bool/complex: must-wrap, but no ruled leaf exit** (opened 2026-07-20,
+  surfaced by the temporal-type collapse; MAINTAINER CALL)
+  - **What:** the collapse folded `_SCALAR_TYPES` into `_PRIMITIVE_TYPES` and
+    added the temporal types, but left `bool`/`complex` in an incoherent
+    corner: they are in `_PRIMITIVE_TYPES` (a compound VO must not hold a raw
+    `bool`; TB016 flags it, so the norm can *require* wrapping a `bool` into a
+    leaf), yet absent from `_CANONICAL_EXIT` (the norm defines no canonical
+    leaf exit for a `bool`- or `complex`-backed VO — the exit vocabulary is
+    `__str__`/`__int__`/`__float__`/`__bytes__` and none is "the bool exit").
+    So a `bool` leaf is constructible, even mandated in context, with an
+    unchecked exit.
+  - **Provenance:** inherited from the original July public-*field* set
+    (`raw primitives a VO must not expose as a public field`) — a
+    field-exposure question that never considered leaf construction or exits.
+  - **The two sub-questions:** (1) should `bool`/`complex` be must-wrap at all?
+    A raw `bool` is atomic in a way a currency string is not — a case can be
+    made that `active: bool` on a compound is fine, unlike `currency: str`.
+    (2) if they stay must-wrap, what is a `bool` leaf's canonical exit —
+    `__str__` (`"true"`/`"false"`), or is `bool` simply its own wire form and
+    exempt? No in-repo VO is backed by either type today, so the blast radius
+    is zero — this is a definitional cleanup, not a migration.
 
 - [ ] **python-app pre-existing error-path test gaps** (opened 2026-07-20,
   PR-B ship review; explicitly NOT that PR's debt)

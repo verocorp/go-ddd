@@ -31,8 +31,8 @@ def test_target_url_invalid_raises_validation() -> None:
 
 def test_date_window_valid() -> None:
     w = DateWindow(DateWindowSpec(start="2026-01-01", end="2026-02-01"))
-    assert w.start.isoformat() == "2026-01-01"
-    assert w.end.isoformat() == "2026-02-01"
+    assert str(w.start) == "2026-01-01"
+    assert str(w.end) == "2026-02-01"
 
 
 def test_date_window_bad_date_wraps_cause_with_field() -> None:

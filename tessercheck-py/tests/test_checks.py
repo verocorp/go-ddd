@@ -724,3 +724,65 @@ def test_tb015_leaf_backed_by_an_unruled_scalar_is_not_mistaken_for_structured()
         "    def __str__(self) -> str:\n        return self._value.isoformat()\n"
     )
     assert "TB015" not in _codes(src)
+
+
+def test_tb016_flags_a_compound_holding_a_raw_date() -> None:
+    # The 2026-07-20 collapse: date/datetime/time joined the must-wrap set.
+    src = (
+        "from datetime import date\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Window:\n"
+        "    _start: date\n"
+        "    _end: date\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB016"]
+    assert len(findings) == 2
+
+
+def test_tb010_flags_an_accessor_returning_a_raw_date() -> None:
+    src = (
+        "from datetime import date\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Day:\n"
+        "    _value: date\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+        "    @property\n"
+        "    def value(self) -> date:\n        return self._value\n"
+    )
+    assert "TB010" in _codes(src)
+
+
+def test_tb015_checks_a_date_leaf_exit_now_that_date_is_ruled() -> None:
+    # date exits as canonical text via __str__; __int__ is a mismatch.
+    good = (
+        "from datetime import date\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Day:\n"
+        "    _value: date\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+        "    def __str__(self) -> str:\n        return self._value.isoformat()\n"
+    )
+    assert "TB015" not in _codes(good)
+    bad = good.replace(
+        "    def __str__(self) -> str:\n        return self._value.isoformat()\n",
+        "    def __int__(self) -> int:\n        return self._value.toordinal()\n",
+    )
+    assert "TB015" in _codes(bad)
+
+
+def test_tb015_a_bool_leaf_exit_stays_out_of_contract() -> None:
+    # bool is must-wrap but has no ruled canonical exit — a bool-backed leaf is
+    # a leaf (not mistaken for structured) and its dunder is left alone.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Flag:\n"
+        "    _value: bool\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+        "    def __str__(self) -> str:\n        return 'yes' if self._value else 'no'\n"
+    )
+    assert "TB015" not in _codes(src)
