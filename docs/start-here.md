@@ -40,10 +40,11 @@ hosts, and handlers (each with a full skill doc, backed by the
 `examples/python-app` template) — plus the cross-cutting **norms**: comments
 (`comments.md`: zero comments, enforced in both languages), serialization
 (`serialization.md`: a domain object never serializes itself), and testing
-(`testing.md`: test doubles are hand-written fakes, never a mocking library,
-and every spec-constructed type gets one construction-completeness test —
-enforced in Python today). Still on the roadmap: domain events, the vendor/ACL
-gateway, and the Go mirrors of the app-level anatomy and the testing norm.
+(`testing.md`: test doubles are hand-written fakes, never a mocking library —
+checked in Python today; the companion rule that every spec-constructed type
+gets one construction-completeness test is ruled doctrine whose checker lands
+next). Still on the roadmap: domain events, the vendor/ACL gateway, and the Go
+mirrors of the app-level anatomy and the testing norm.
 
 ## Where everything lives
 

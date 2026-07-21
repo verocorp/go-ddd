@@ -90,9 +90,9 @@ go vet ./... && gofmt -l .             # both must be clean
 The Python half is not covered by `go test`. Run it too:
 
 ```
-cd tessercheck-py && mypy && pytest -q  # the TB0* checks + the fixture meta-test
-python3 roadmap/generate.py --check     # ROADMAP.md is generated — never hand-edit it
-cd roadmap && pytest tests -q           # the generator's own suite
+(cd tessercheck-py && mypy && pytest -q) # the TB0* checks + the fixture meta-test
+python3 roadmap/generate.py --check      # ROADMAP.md is generated — never hand-edit it
+(cd roadmap && pytest tests -q)          # the generator's own suite
 ```
 
 ## Git & shipping
