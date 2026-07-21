@@ -381,3 +381,57 @@ Deferred work with context. Each entry carries enough for a cold pickup.
   - **Note:** a parallel branch (the testing-norm wave) already derives
     suppression from COMMENT tokens in its own new check. Reconcile to ONE
     shared implementation when both land rather than leaving two.
+
+- [ ] **Testing norm scope across the Python example trees** (2026-07-20,
+  testing-norm eng review)
+  - **What:** the testing norm (wave A) makes `examples/python` its sole
+    canonical tree (R6). `examples/python-app` (13 test files), `examples/serdepy`,
+    and `examples/errorspy` are all gated by tessercheck in CI but are NOT held to
+    the testing norm, so their test suites will diverge from what `testing.md`
+    teaches. Decide, per tree, whether each adopts the norm or is exempt-with-reason.
+  - **Why it matters:** a norm that governs one example tree while three siblings
+    gated in the same CI drift is exactly the inconsistency the toolkit argues
+    against — and `python-app` is the anatomy consumers copy from most, so its
+    tests teach by example whether or not they conform.
+  - **Depends on / blocked by:** wave B of the testing norm — the norm is not
+    complete until OQ2 (parametrize), OQ3 (layout), and OQ4 (AAA) are ruled; there
+    is nothing stable to conform these trees to until then.
+  - **Start at:** the design doc's R6 ruling and NOT-in-scope section
+    (`~/.gstack/projects/verocorp-go-ddd/chris-main-design-20260720-152139.md`);
+    mirror the shape of the "repository read paths" named-gap entry above.
+
+- [ ] **Roadmap bindings at the artifact ("mechanism #2")** (2026-07-21, PR #27
+  follow-up)
+  - **What:** move the row BINDING out of `roadmap/registry.json` and onto the
+    artifact that already knows it — a required `row` field on `CheckMeta`
+    (`tessercheck-py/tessercheck/finding.py`), the same on the Go
+    `analyzers.All` entries, and a `tb-row:` marker beside the existing
+    `tb-status:` in each skill doc. The registry then declares only what no
+    artifact can know: the row taxonomy itself, planned (`[]`) vs n/a (absent
+    key), and rationale globs. `py_checks` / `go_analyzers` / `skill` come out
+    of it and are computed by inversion.
+  - **Why it matters:** PR #27's totality guard catches OMISSION, not
+    MISASSIGNMENT — every check must be claimed by *some* row, but nothing
+    checks it is the right one; TB030 could sit on `norm-comments` and CI stays
+    green forever. Bindings at the artifact also collapse the two-place edit
+    (checker + registry) that produced the original gap, and move the failure
+    from CI-time to authoring-time: a `CheckMeta` without a row fails in the
+    same file, in the same edit.
+  - **How:** follows the repo's existing meta-test idiom in both languages —
+    "a check cannot land without a fixture pair" (the `CHECKS` meta-test) and
+    "an analyzer cannot land without tests" (`TestEveryAnalyzerIsTested`)
+    become "a check cannot land without a row". The migration is mechanical: a
+    few dozen strings move from JSON into `CheckMeta` entries and `tb-row:`
+    markers.
+  - **Also open, same area:** `examples/` is deliberately NOT a guarded
+    universe — `examples/editor` and `examples/golangci` are genuinely not
+    components, so it needs a marker scheme rather than an exemption list. And
+    `tb-cell` judgment prose (e.g. "D3 won; D1 pending") is unverifiable by any
+    mechanism; the only control is that markers live at the source they
+    describe.
+  - **Why not now:** #27 closed the failure that mattered — a whole shipped
+    norm invisible in the matrix — and that guarantee does not decay if this
+    never lands. This is a precision + ergonomics upgrade against 14 check
+    codes, 8 analyzers and 21 skill docs: real, modest, and no worse to do
+    later than now (ruled 2026-07-21, weighed against writing `errors.md`,
+    which ranked higher).
