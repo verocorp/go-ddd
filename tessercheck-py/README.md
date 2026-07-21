@@ -68,6 +68,15 @@ Identity-taxonomy checks (TB010–TB014), keyed on the classifier:
 | **TB013** | a structured domain object (entity/aggregate) constructs through its spec — `__init__(self, spec)`; no separate `from_spec` factory |
 | **TB014** | equality matches the stereotype: a VO compares by value; an entity defines `__eq__`+`__hash__` together (by ID); an aggregate root blocks accidental equality |
 
+Serialization checks (TB015–TB018), the `serialization.md` norm:
+
+| Code | Rule |
+|---|---|
+| **TB015** | a domain object never serializes itself: no public method returning a spec, no emit-a-sink, no second or mismatched conversion dunder on a leaf, and **no conversion dunder at all** on a compound/entity/aggregate (collection VOs included) |
+| **TB016** | what a value object is built from: a compound holds child value objects, not bare primitives; and `bool`/`complex` are not value-object material at all (a bool is atomic, complex has no wire form) |
+| **TB017** | a value object has ONE construction door — its own `__init__`. Any classmethod/staticmethod returning its own type is a second door, name-agnostic (`from_spec`/`parse`/`new`/`require`/`of`), because two doors mean two invariant sets on one type |
+| **TB018** | a leaf's conversion dunder is a one-line delegation to the `canonical_*` policy helper for its backing type, so each canonical form has exactly ONE implementation site (`date`/`time` are out of contract until the time-type taxonomy is ruled) |
+
 Norm checks:
 
 | Code | Rule |

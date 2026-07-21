@@ -28,8 +28,12 @@ def test_as_dict_copies_out_defensively() -> None:
 
 
 def test_single_construction_door() -> None:
-    for name in ("new", "require", "from_spec", "parse", "of"):
-        assert name not in Labels.__dict__
+    factories = [
+        name
+        for name, member in vars(Labels).items()
+        if isinstance(member, (classmethod, staticmethod))
+    ]
+    assert factories == []
 
 
 def test_collection_vo_has_no_conversion_dunders() -> None:

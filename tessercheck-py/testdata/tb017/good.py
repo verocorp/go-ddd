@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class Money:
 
 @dataclass(frozen=True, init=False)
 class Labels:
-    _values: tuple[tuple[str, str], ...] = field(default=())
+    _values: tuple[tuple[str, str], ...]
 
     def __init__(self, values: Mapping[str, str]) -> None:
         if not values:

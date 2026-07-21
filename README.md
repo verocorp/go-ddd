@@ -85,7 +85,9 @@ The Python analog ([`tessercheck-py/`](tessercheck-py/)): a zero-dependency,
 stdlib-`ast` conformance analyzer for the frozen-dataclass conventions in
 [`skills/tesser-build/python.md`](skills/tesser-build/python.md). Syntactic
 checks (`TB001`–`TB004`), classification-aware checks (`TB010`–`TB014`)
-that distinguish value objects from identity objects, and a zero-comment
+that distinguish value objects from identity objects, serialization-norm
+checks (`TB015`–`TB018`) covering how a domain object is built and how its
+primitive leaves, and a zero-comment
 check (`TB020`, no test exemption — the norm covers the whole tree). Run
 `python -m tessercheck path/to/domain`; flake8-style output; suppress a single
 line with a trailing `# tessercheck:ignore`.
@@ -227,7 +229,8 @@ primitive accessors, and `Equal` where `==` is unavailable or unsafe) and the
 **comments norm** (`comments` analyzer: zero code comments, machine directives
 exempt — `skills/tesser-build/comments.md`). The Python side goes further:
 `tessercheck-py` adds classification-aware identity-taxonomy checks
-(TB010–TB014) and whole-tree context discovery (`tessercheck-py/README.md`).
+(TB010–TB014), the serialization-norm checks (TB015–TB018), and whole-tree
+context discovery (`tessercheck-py/README.md`).
 The skill teaches the broader construction conventions — entities, aggregates,
 services, repositories, wiring, bootstrap, hosts — ahead of what the analyzers
 cover. The original three, briefly:

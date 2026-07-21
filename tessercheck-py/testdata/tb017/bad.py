@@ -14,6 +14,10 @@ class Slug:
     def parse(cls, raw: str) -> "Slug":
         return cls(raw.strip().lower())
 
+    @classmethod
+    def coerce(cls, raw):  # type: ignore[no-untyped-def]
+        return cls(raw)
+
 
 @dataclass(frozen=True)
 class Amount:

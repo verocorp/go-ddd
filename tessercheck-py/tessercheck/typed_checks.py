@@ -187,7 +187,12 @@ def _annotation_names(ann: ast.expr | None) -> set[str]:
         elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
             try:
                 names |= _annotation_names(ast.parse(sub.value, mode="eval").body)
-            except SyntaxError:
+            except (SyntaxError, ValueError, MemoryError, RecursionError):
+                # A string annotation is never compiled by Python, so it can hold
+                # anything at all — including an expression deep enough that the
+                # parser overflows its stack (MemoryError, NOT SyntaxError) or
+                # recurses past the limit. Falling back to the raw text keeps one
+                # pathological source file from aborting the whole tree scan.
                 names.add(sub.value)
     return names
 
@@ -503,6 +508,44 @@ def _check_construction(
     return findings
 
 
+def _constructs_own_type(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef, class_name: str
+) -> bool:
+    """True when the body returns a direct call to ``cls`` or to the class
+    itself — the construction signature read from the body instead of the
+    signature.
+
+    The annotation is the primary signal, but it is optional Python: an
+    unannotated ``def parse(cls, raw): return cls(raw)`` is the same second
+    door, and a tree that does not run a strict type checker would otherwise
+    hide it.
+
+    Detection is on *construction anywhere in the body*, not on the shape of the
+    return statement, because the return statement is the easiest thing to vary:
+    ``built = cls(raw); return built``, ``return cls(a) if a else cls(b)`` and
+    ``return (out := cls(raw))`` are all the same door. It also catches
+    ``object.__new__(cls)``, which is the one that matters most — that door skips
+    ``__init__`` and every invariant it enforces.
+
+    The caller consults this ONLY when the return annotation is absent, so a
+    factory that is annotated to return some other type is taken at its word and
+    a helper that happens to build one internally is not swept in.
+    """
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in ("cls", class_name):
+            return True
+        if isinstance(func, ast.Attribute) and func.attr in ("cls", class_name):
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == "__new__":
+            for arg in node.args:
+                if isinstance(arg, ast.Name) and arg.id in ("cls", class_name):
+                    return True
+    return False
+
+
 def _check_single_door(
     node: ast.ClassDef,
     path: str,
@@ -536,7 +579,13 @@ def _check_single_door(
         if not (_decorator_names(member) & _FACTORY_DECORATORS):
             continue
         returned = _annotation_names(member.returns)
-        if not ({node.name, "Self"} & returned):
+        names_own_type = bool({node.name, "Self"} & returned)
+        # The body is consulted only when the annotation tells us nothing we can
+        # trust — absent, empty, or unparseable text. An annotation that cleanly
+        # names some OTHER type is taken at its word, so a helper that builds one
+        # internally on the way to an int is not swept in.
+        unresolved = not returned or not all(n.isidentifier() for n in returned)
+        if not (names_own_type or (unresolved and _constructs_own_type(member, node.name))):
             continue
         if suppressed(member.lineno):
             continue
@@ -655,20 +704,40 @@ def _check_public_decompiler(
 
 
 def _delegated_call_name(fn: ast.FunctionDef) -> str | None:
-    """The name of the function a one-line ``return f(...)`` body delegates to,
-    or ``None`` when the body is anything else.
+    """The name of the function a one-line ``return f(self._x)`` body delegates
+    to, or ``None`` when the body is anything else.
 
-    Deliberately strict about *bare* delegation: ``return canonical_str(x).upper()``
-    returns ``None`` (the outer call is the attribute, not the helper), because a
-    post-processed helper result is no longer the policy's output — the exit has
-    quietly acquired a second author.
+    Both import idioms resolve to the same name: ``canonical_str(...)`` (from-import)
+    and ``serialization.canonical_str(...)`` (module-qualified) are the same
+    delegation, so the check must not push authors toward one spelling.
+
+    Deliberately strict about *bare* delegation, on both sides of the call:
+
+    * ``return canonical_str(x).upper()`` — the helper's output is post-processed,
+      so the emitted form is no longer the policy's. The outer call resolves to
+      ``upper``, which is not the expected helper, and the exit is flagged.
+    * ``return canonical_str(self._value.upper())`` — the helper's *input* is
+      pre-processed, which has exactly the same second author applied one step
+      earlier. The argument must be a bare load of ``self``'s own field.
     """
     if len(fn.body) != 1:
         return None
     stmt = fn.body[0]
     if not isinstance(stmt, ast.Return) or not isinstance(stmt.value, ast.Call):
         return None
-    return stmt.value.func.id if isinstance(stmt.value.func, ast.Name) else None
+    call = stmt.value
+    if len(call.args) != 1 or call.keywords:
+        return None
+    arg = call.args[0]
+    if not (
+        isinstance(arg, ast.Attribute)
+        and isinstance(arg.value, ast.Name)
+        and arg.value.id == "self"
+    ):
+        return None
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    return call.func.attr if isinstance(call.func, ast.Attribute) else None
 
 
 def _check_canonical_routing(
