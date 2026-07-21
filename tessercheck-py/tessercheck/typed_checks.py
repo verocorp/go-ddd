@@ -37,22 +37,31 @@ from tessercheck.finding import Finding
 # A predicate over 1-based line numbers: is a ``# tessercheck:ignore`` on that line?
 _Suppressed = Callable[[int], bool]
 
-# The scalar representations a domain type must not expose raw — "primitive" in
-# the DDD (primitive-obsession) sense, so the stdlib temporals count, not only
-# the language builtins. ONE set answers two faces of the same question: which
-# scalars a leaf value object wraps (leaf-vs-structured discrimination) and which
-# a domain type must not hand out raw (the TB010 accessor ban + the TB016
-# compound-field ban). They are the same category — every wrappable scalar is a
-# must-wrap representation and vice versa — so they are one set, not two
-# (maintainer ruling 2026-07-20, collapsing the transient _SCALAR_TYPES split
-# that the temporal-type ruling had forced open). A currency code is a Currency
-# VO, a Decimal is its own VO, a date is a Day VO; a leaf's canonical conversion
-# exit (serialization.md rule 3) is the sole door back out. What is NOT here is
-# what makes a single-field class structured instead of a leaf: a collection
-# field (``tuple[Label, ...]``) or a field typed as another domain object.
+# The scalar representations a value object wraps — "primitive" in the DDD
+# (primitive-obsession) sense, so the stdlib temporals count, not only the
+# language builtins. ONE set answers two faces of the same question: which
+# scalars a leaf value object wraps, and which a domain type must not hand out
+# raw (the TB010 accessor ban + the TB016 compound-field ban). Every member has
+# a canonical exit — this set is exactly _CANONICAL_EXIT's keys — because a
+# wrappable scalar is one you can both hide inside a VO AND get a canonical form
+# back out of. A currency code is a Currency VO, a Decimal its own VO, a date a
+# Day VO; the leaf's conversion exit (serialization.md rule 3) is the door back
+# out. What is NOT here: what makes a single-field class structured (a collection
+# field, or a field typed as another domain object) — and the NON-wrappable
+# scalars below.
 _PRIMITIVE_TYPES: frozenset[str] = frozenset(
-    {"str", "int", "float", "bool", "bytes", "complex", "Decimal", "date", "datetime", "time"}
+    {"str", "int", "float", "bytes", "Decimal", "date", "datetime", "time"}
 )
+
+# Scalars that are NOT value-object material — a value object may not wrap one
+# (maintainer ruling 2026-07-20). ``bool`` is atomic: model it raw, or reach for
+# an enum when it is really richer than binary; it has no canonical conversion
+# exit (its only candidate dunder, ``__bool__``, is truthiness, not a
+# serialization form) and no non-lossy projection onto one that survives every
+# wire. ``complex`` has no domain wire form at all. They are still scalars for
+# leaf-vs-structured discrimination (a single ``bool`` field is a leaf, not a
+# compound) — but the leaf itself is the violation, flagged by TB016.
+_NON_WRAPPABLE: frozenset[str] = frozenset({"bool", "complex"})
 
 # Collection bases whose instance a caller can mutate. Handing back the backing
 # store of one of these lets a caller ``.append``/``.pop``/``[k]=`` into the
@@ -73,16 +82,13 @@ _CONVERSION_DUNDERS: frozenset[str] = frozenset(
     {"__str__", "__int__", "__float__", "__bytes__"}
 )
 
-# The subset of _PRIMITIVE_TYPES with a *ruled* canonical exit — a proper subset,
-# not a match. The four native primitives map to their own conversion protocol;
-# the representations without one (Decimal, date, datetime, time) exit as
-# canonical text via __str__ under the pinned policies (serialization.md rule 3).
-# The gap from _PRIMITIVE_TYPES is exactly {bool, complex}: they are must-wrap
-# (a compound VO must not hold one raw) but the norm has defined no canonical
-# leaf exit for them, so a leaf backed by one has its dunder left alone rather
-# than guessed at. Whether bool/complex should be must-wrap at all, and if so
-# what their exit is, is a separate open question (TODOS.md) inherited from the
-# original public-field set.
+# Every wrappable primitive's ruled canonical exit — keys are exactly
+# _PRIMITIVE_TYPES (a wrappable scalar is by definition one with a canonical form
+# out). The four native primitives map to their own conversion protocol; the
+# representations without one (Decimal, date, datetime, time) exit as canonical
+# text via __str__ under the pinned policies (serialization.md rule 3). bool and
+# complex are absent because they are not wrappable at all (_NON_WRAPPABLE) — not
+# because they are wrappable-without-an-exit.
 _CANONICAL_EXIT: dict[str, str] = {
     "str": "__str__",
     "int": "__int__",
@@ -118,16 +124,17 @@ def _leaf_backing(node: ast.ClassDef) -> str | None:
     at all. This is the discriminator the norm's "a leaf has exactly one
     matching conversion dunder; a structured type has none" contract rests on.
 
-    Membership is keyed on :data:`_PRIMITIVE_TYPES` (leaf-eligibility and
-    must-wrap are the same category), NOT on the ruled-exit table: a leaf backed
-    by a scalar whose exit the norm has not ruled (``bool``) is still a leaf, so
-    a stray dunder on it is left alone rather than mistaken for a compound's.
+    Membership is keyed on every scalar — wrappable (:data:`_PRIMITIVE_TYPES`)
+    OR not (:data:`_NON_WRAPPABLE`) — because leaf-vs-structured is a structural
+    question: a single ``bool`` field is a leaf shape, not a compound. Whether a
+    ``bool`` leaf is *allowed* is a separate matter TB016 owns; keeping it a leaf
+    here stops it being misreported as a structured type with an illegal dunder.
     """
     fields = _fields(node)
     if len(fields) != 1:
         return None
     base = _annotation_base(fields[0].annotation)
-    return base if base in _PRIMITIVE_TYPES else None
+    return base if base in (_PRIMITIVE_TYPES | _NON_WRAPPABLE) else None
 
 
 def _defined_conversion_dunders(node: ast.ClassDef) -> list[ast.FunctionDef]:
@@ -571,24 +578,50 @@ def _check_compound_raw_primitive(
     path: str,
     suppressed: "_Suppressed",
 ) -> list[Finding]:
-    """TB016 — a compound value object holds child value objects, not bare
-    primitives (serialization.md rule 5's internal half; the 2026-07-20 R1
-    ruling).
+    """TB016 — what a value object may be built from (serialization.md rule 5's
+    internal half; the 2026-07-20 R1 ruling and its bool/complex amendment).
 
-    A value object with two or more fields is a compound: it names a concept
-    assembled from other concepts, and each of those concepts is itself a value
-    object (``Money{MoneyAmount, MoneyCurrency}``, not ``Money{Decimal, str}``).
-    Keeping a bare primitive in a compound strands its validation and behavior
-    at the compound — the quanta ``Decimal`` precedent — and leaves the component
-    with no canonical exit of its own.
+    Two violations, one code:
 
-    A single-field value object is a leaf and is untouched: wrapping one
-    standardized primitive representation is exactly what a leaf is for.
+    * **A bool/complex leaf.** ``bool`` and ``complex`` are not value-object
+      material: a ``bool`` is atomic (model it raw, or an enum when it is richer
+      than binary) and has no canonical conversion exit; ``complex`` has no
+      domain wire form. A value object that wraps one is the violation itself,
+      regardless of field count.
+    * **A compound holding a bare primitive.** A value object with two or more
+      fields is a compound — a concept assembled from other concepts, each of
+      them a value object (``Money{MoneyAmount, MoneyCurrency}``, not
+      ``Money{Decimal, str}``). A bare wrappable primitive in a compound strands
+      its validation and behavior at the compound (the quanta ``Decimal``
+      precedent) and leaves the component with no canonical exit of its own.
+
+    A single-field value object wrapping one wrappable primitive is a leaf and is
+    untouched: that is exactly what a leaf is for.
     """
-    fields = _fields(node)
-    if len(fields) < 2:
-        return []
     findings: list[Finding] = []
+    fields = _fields(node)
+
+    for field in fields:
+        if _annotation_base(field.annotation) not in _NON_WRAPPABLE:
+            continue
+        if suppressed(field.lineno):
+            continue
+        name = field.target.id if isinstance(field.target, ast.Name) else "?"
+        base = _annotation_base(field.annotation)
+        findings.append(
+            Finding(
+                path,
+                field.lineno,
+                field.col_offset + 1,
+                "TB016",
+                f"{node.name}.{name} is a {base}; {base} is not value-object "
+                "material — a bool is atomic (model it raw, or an enum), complex "
+                "has no domain wire form. Do not wrap it in a value object",
+            )
+        )
+
+    if len(fields) < 2:
+        return findings
     for field in fields:
         if not _contains_primitive(field.annotation):
             continue

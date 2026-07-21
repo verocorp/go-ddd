@@ -774,9 +774,9 @@ def test_tb015_checks_a_date_leaf_exit_now_that_date_is_ruled() -> None:
     assert "TB015" in _codes(bad)
 
 
-def test_tb015_a_bool_leaf_exit_stays_out_of_contract() -> None:
-    # bool is must-wrap but has no ruled canonical exit — a bool-backed leaf is
-    # a leaf (not mistaken for structured) and its dunder is left alone.
+def test_a_bool_leaf_is_flagged_by_tb016_not_tb015() -> None:
+    # bool is not value-object material (2026-07-20 ruling): wrapping one is the
+    # violation, owned by TB016. TB015 stays silent — the exit is not the issue.
     src = (
         "from dataclasses import dataclass\n"
         "@dataclass(frozen=True)\n"
@@ -785,4 +785,52 @@ def test_tb015_a_bool_leaf_exit_stays_out_of_contract() -> None:
         "    def __post_init__(self) -> None:\n        pass\n"
         "    def __str__(self) -> str:\n        return 'yes' if self._value else 'no'\n"
     )
-    assert "TB015" not in _codes(src)
+    codes = _codes(src)
+    assert "TB016" in codes
+    assert "TB015" not in codes
+
+
+def test_tb016_flags_a_bool_leaf_and_a_complex_leaf() -> None:
+    for typ in ("bool", "complex"):
+        src = (
+            "from dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class Wrapper:\n"
+            f"    _value: {typ}\n"
+            "    def __post_init__(self) -> None:\n        pass\n"
+        )
+        assert "TB016" in _codes(src), typ
+
+
+def test_tb016_flags_a_bool_field_inside_a_compound_vo() -> None:
+    # A bool has no legal home in a value object: it cannot be raw (rule 5) and
+    # cannot be wrapped (not VO material). Flagged wherever it sits in a VO.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Amount:\n"
+        "    _value: str\n"
+        "    def __str__(self) -> str:\n        return self._value\n"
+        "@dataclass(frozen=True)\n"
+        "class Money:\n"
+        "    _amount: Amount\n"
+        "    _estimate: bool\n"
+        "    def __post_init__(self) -> None:\n        pass\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB016"]
+    assert len(findings) == 1
+    assert "_estimate" in findings[0].message
+
+
+def test_tb016_leaves_an_entity_bool_field_alone() -> None:
+    # TB016 is value-object-scoped; an entity holds raw primitives as state.
+    src = (
+        "class Link:\n"
+        "    def __init__(self, id: str, active: bool) -> None:\n"
+        "        self._id = id\n"
+        "        self._active = active\n"
+        "    def __eq__(self, other: object) -> bool:\n"
+        "        return isinstance(other, Link) and other._id == self._id\n"
+        "    def __hash__(self) -> int:\n        return hash(self._id)\n"
+    )
+    assert "TB016" not in _codes(src)

@@ -163,17 +163,22 @@ belongs to the edge, recorded where its golden test lives.
   is declared out of contract — review territory. Leaf-vs-structured is
   decided mechanically: exactly one field annotated with a bare scalar is a
   leaf; anything else — two or more fields, a collection field, a field typed
-  as another domain object — is structured. A leaf backed by a scalar the
-  norm has not ruled an exit for (`bool`) is still a leaf, so a stray dunder
-  on it is left alone rather than mistaken for a structured type's.
-- **TB016** (the compound-raw-primitive check) flags rule 5's internal
-  half: a multi-field VO holding bare primitives instead of child VOs. The
-  must-wrap set is "primitive" in the DDD sense — the language scalars plus
-  the stdlib temporals (`date`/`datetime`/`time`), which a compound must wrap
-  in child VOs just like a `Decimal` (maintainer ruling 2026-07-20). A
-  `date`-backed leaf exits as canonical text via `__str__`. The residual gap
-  is `bool`/`complex`: must-wrap, but with no ruled leaf exit — a separate
-  open question (`TODOS.md`). Types with no stereotype meaning at all
+  as another domain object — is structured. A single `bool`/`complex` field
+  reads as a leaf shape (not misreported as structured), but the leaf itself
+  is a TB016 violation — those scalars are not value-object material.
+- **TB016** (the value-object-primitives check) flags rule 5's internal
+  half: what a VO may be built from. A compound holds child VOs, not bare
+  primitives. The wrappable set is "primitive" in the DDD sense — the
+  language scalars plus the stdlib temporals (`date`/`datetime`/`time`),
+  which a compound wraps in child VOs just like a `Decimal`, and a
+  `date`-backed leaf exits as canonical text via `__str__` (maintainer ruling
+  2026-07-20). `bool` and `complex` are the exception: they are **not
+  value-object material at all** — a `bool` is atomic (model it raw, or an
+  enum when it is richer than binary; it has no canonical conversion exit),
+  `complex` has no domain wire form — so wrapping either in a VO, or holding
+  one as a VO field, is itself the violation (ruling 2026-07-20). The
+  wrappable set is now exactly the set with a ruled canonical exit; there is
+  no must-wrap-without-an-exit gap. Types with no stereotype meaning at all
   (`UUID`, `Enum`) stay out of contract rather than guessed at.
 - The **parts import boundary** (adapters consume parts, not domain types,
   outbound) is a named deferred check; until it ships, rule 7 is

@@ -104,28 +104,6 @@ Deferred work with context. Each entry carries enough for a cold pickup.
   - **Trigger:** a measured performance problem in a real consumer, not
     aesthetics.
 
-- [ ] **bool/complex: must-wrap, but no ruled leaf exit** (opened 2026-07-20,
-  surfaced by the temporal-type collapse; MAINTAINER CALL)
-  - **What:** the collapse folded `_SCALAR_TYPES` into `_PRIMITIVE_TYPES` and
-    added the temporal types, but left `bool`/`complex` in an incoherent
-    corner: they are in `_PRIMITIVE_TYPES` (a compound VO must not hold a raw
-    `bool`; TB016 flags it, so the norm can *require* wrapping a `bool` into a
-    leaf), yet absent from `_CANONICAL_EXIT` (the norm defines no canonical
-    leaf exit for a `bool`- or `complex`-backed VO — the exit vocabulary is
-    `__str__`/`__int__`/`__float__`/`__bytes__` and none is "the bool exit").
-    So a `bool` leaf is constructible, even mandated in context, with an
-    unchecked exit.
-  - **Provenance:** inherited from the original July public-*field* set
-    (`raw primitives a VO must not expose as a public field`) — a
-    field-exposure question that never considered leaf construction or exits.
-  - **The two sub-questions:** (1) should `bool`/`complex` be must-wrap at all?
-    A raw `bool` is atomic in a way a currency string is not — a case can be
-    made that `active: bool` on a compound is fine, unlike `currency: str`.
-    (2) if they stay must-wrap, what is a `bool` leaf's canonical exit —
-    `__str__` (`"true"`/`"false"`), or is `bool` simply its own wire form and
-    exempt? No in-repo VO is backed by either type today, so the blast radius
-    is zero — this is a definitional cleanup, not a migration.
-
 - [ ] **python-app pre-existing error-path test gaps** (opened 2026-07-20,
   PR-B ship review; explicitly NOT that PR's debt)
   - **What:** two error surfaces in `examples/python-app` have never had

@@ -32,3 +32,12 @@ class Coordinate:
 class Window:
     _label: str
     _spans: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Recurring:
+    _value: bool
+
+    def __post_init__(self) -> None:
+        if self._value not in (True, False):
+            raise ValueError(self._value)

@@ -113,10 +113,12 @@ CHECKS: tuple[CheckMeta, ...] = (
     ),
     CheckMeta(
         "TB016",
-        "compound-raw-primitive",
-        "a compound value object holds child value objects, not bare primitives "
-        "— a multi-field VO keeping a raw primitive strands that component's "
-        "validation, behavior and canonical exit at the compound",
+        "value-object-primitives",
+        "what a value object is built from: a compound holds child value "
+        "objects, not bare primitives (a raw primitive strands its validation, "
+        "behavior and canonical exit at the compound); and bool/complex are not "
+        "value-object material at all — a bool is atomic (model it raw or an "
+        "enum), complex has no domain wire form",
     ),
     CheckMeta(
         "TB020",
