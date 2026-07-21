@@ -529,11 +529,19 @@ def test_tb030_plain_import_unittest_alone_is_not_flagged() -> None:
 
 
 def test_tb030_bans_monkeypatch_in_every_shape() -> None:
-    # pytest.MonkeyPatch ; from pytest import MonkeyPatch ; a bare MonkeyPatch
-    # reference (MonkeyPatch.context()) ; and the monkeypatch fixture parameter.
+    # pytest.MonkeyPatch ; from pytest import MonkeyPatch (which is how a
+    # MonkeyPatch().context() use gets the name) ; and the monkeypatch fixture
+    # parameter. The name cannot enter a module any other way.
     assert "TB030" in _tb030("import pytest\n\n\ndef f() -> object:\n    return pytest.MonkeyPatch()\n")
     assert "TB030" in _tb030("from pytest import MonkeyPatch\n")
-    assert "TB030" in _tb030("def f(mp: object) -> None:\n    with MonkeyPatch().context() as m:\n        pass\n")
+    assert "TB030" in _tb030(
+        "from pytest import MonkeyPatch\n"
+        "\n"
+        "\n"
+        "def f() -> None:\n"
+        "    with MonkeyPatch().context():\n"
+        "        pass\n"
+    )
     assert "TB030" in _tb030("def test_x(monkeypatch: object) -> None:\n    monkeypatch.setenv('A', 'B')\n")
 
 
@@ -551,11 +559,94 @@ def test_tb030_fires_regardless_of_test_scope() -> None:
 
 
 def test_tb030_inline_suppression_clears_a_wiring_patch() -> None:
-    # A wiring test that must patch a process seam declares it.
+    # A wiring test that must patch a process seam declares it. Assert the
+    # WHOLE finding list is empty, not just that TB030 is absent: the marker is
+    # itself a comment, so the hatch is only usable while TB020 also treats it
+    # as a directive. A weaker assertion would still pass if TB020 started
+    # firing on the marker line and made the hatch unusable.
     clean = "def test_boot(monkeypatch: object) -> None:  # tessercheck:ignore\n    pass\n"
-    assert "TB030" not in _tb030(clean)
+    assert check_source("t.py", clean, is_test=False) == []
     dirty = "def test_boot(monkeypatch: object) -> None:\n    pass\n"
     assert "TB030" in _tb030(dirty)
+
+
+def test_tb030_suppression_covers_a_formatter_wrapped_import() -> None:
+    # The finding reports at the statement's START line, so suppression scans
+    # the node's whole span — otherwise a marker on the closing paren of a
+    # wrapped import (what a formatter produces) would suppress nothing.
+    wrapped = "from unittest.mock import (\n    MagicMock,\n)  # tessercheck:ignore\n"
+    assert "TB030" not in _tb030(wrapped)
+    assert "TB030" in _tb030("from unittest.mock import (\n    MagicMock,\n)\n")
+
+
+def test_tb030_reports_one_finding_per_violation() -> None:
+    # An import plus N uses of the imported name is ONE violation with one
+    # place to fix. There is no bare-Name arm, so the import is reported once
+    # and a single suppression marker can clear it — rather than one finding
+    # per reference, each needing its own marker.
+    src = (
+        "from pytest import MonkeyPatch\n"
+        "\n"
+        "\n"
+        "def f(mp: MonkeyPatch) -> object:\n"
+        "    with MonkeyPatch().context() as m:\n"
+        "        return m\n"
+    )
+    findings = [f for f in check_source("t.py", src, is_test=True) if f.code == "TB030"]
+    assert [f.line for f in findings] == [1]
+
+
+def test_tb030_fixture_param_scan_does_not_fire_on_production_code() -> None:
+    # The identifier-name signal is scoped to pytest-shaped functions. A
+    # production function that happens to take a parameter named monkeypatch or
+    # mocker is an ordinary name, not a fixture injection — flagging it would
+    # redden conformant code.
+    prod = "def configure(mocker: object, monkeypatch: object) -> None:\n    pass\n"
+    assert "TB030" not in _tb030(prod)
+    # ...but a fixture factory and a test function both count as pytest-shaped.
+    assert "TB030" in _tb030(
+        "import pytest\n"
+        "\n"
+        "\n"
+        "@pytest.fixture\n"
+        "def thing(monkeypatch: object) -> object:\n"
+        "    return monkeypatch\n"
+    )
+
+
+def test_tb030_detects_positional_only_and_keyword_only_fixture_params() -> None:
+    # The fixture-param scan covers all three arg lists. Without posonlyargs
+    # and kwonlyargs in the tuple these two shapes slip through silently.
+    assert "TB030" in _tb030("def test_x(monkeypatch: object, /) -> None:\n    pass\n")
+    assert "TB030" in _tb030("def test_x(*, mocker: object) -> None:\n    pass\n")
+
+
+def test_tb030_detects_an_async_test_function() -> None:
+    # AsyncFunctionDef is a separate node type; dropping it from the isinstance
+    # tuple would be a silent no-op for a suite of sync-only tests.
+    src = "async def test_x(mocker: object) -> None:\n    pass\n"
+    assert "TB030" in _tb030(src)
+
+
+def test_tb030_finding_points_at_the_argument_not_the_def() -> None:
+    # emit(arg, ...) is deliberate: the finding locates the offending fixture
+    # parameter, not the enclosing def. Locking the payload (line, col, message)
+    # so the choice can't silently regress to the statement position.
+    src = "def test_x(monkeypatch: object) -> None:\n    pass\n"
+    findings = [f for f in check_source("t.py", src, is_test=False) if f.code == "TB030"]
+    assert len(findings) == 1
+    assert findings[0].line == 1
+    assert findings[0].col == src.index("monkeypatch") + 1
+    assert "monkeypatch" in findings[0].message
+
+
+def test_tb030_suppression_applies_to_an_import_shape() -> None:
+    # Suppression keys on the line the finding is emitted at, which for an
+    # import is the statement's FIRST line — the marker must sit there.
+    assert "TB030" not in _tb030(
+        "from unittest.mock import MagicMock  # tessercheck:ignore\n"
+    )
+    assert "TB030" in _tb030("from unittest.mock import MagicMock\n")
 
 
 def test_tb030_leaves_a_hand_written_fake_alone() -> None:

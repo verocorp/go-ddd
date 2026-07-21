@@ -73,9 +73,10 @@ Norm checks:
 | Code | Rule |
 |---|---|
 | **TB020** | the comments norm v0 ([`skills/tesser-build/comments.md`](../skills/tesser-build/comments.md)): no code comments, docstrings, or bare string-literal statements — machine directives exempt; **no test exemption** |
+| **TB030** | the fakes-only test-double norm ([`skills/tesser-build/testing.md`](../skills/tesser-build/testing.md)): a test double is a hand-written fake — mocking libraries (`unittest.mock` in any import shape, the `mock` backport, pytest-mock's `mocker`) and pytest's `monkeypatch`/`MonkeyPatch` are banned tree-wide; **no test exemption** (a wiring test that must patch a process seam carries `# tessercheck:ignore`) |
 
-Scope: TB001–003 apply to non-test code (test files are exempt); TB004 and
-TB020 fire everywhere. A file is "test code" when its name is a pytest module
+Scope: TB001–003 apply to non-test code (test files are exempt); TB004,
+TB020, and TB030 fire everywhere. A file is "test code" when its name is a pytest module
 (`test_*.py` / `*_test.py` / `conftest.py`) or any path component is
 `tests`/`testdata`. The classifier runs over the **whole tree** in one pass,
 so cross-file embedding (an aggregate owning an entity defined in another

@@ -3,9 +3,11 @@
 <!-- tb-status: partial -->
 
 **v0 of the testing norm covers how a test is written and what it must
-prove — not how the suite is laid out.** Two rules are machine-checked; the
-rest is guidance enforced by review. What is genuinely undecided is listed as
-open at the bottom rather than smuggled in as prose (Chris ruling 2026-07-20).
+prove — not how the suite is laid out.** Rule 1 is machine-checked today; rule
+2 is ruled doctrine whose checker is specified by its fixture pair and lands
+next; the rest is guidance enforced by review. What is genuinely undecided is
+listed as open at the bottom rather than smuggled in as prose (Chris ruling
+2026-07-20).
 
 The per-component `## Tests you must write` sections say *what* to test. This
 file says *how*, and it is the cross-cutting layer they assume.
@@ -111,13 +113,30 @@ file says *how*, and it is the cross-cutting layer they assume.
 
 - **`TB030` (no-mock-libraries)** — rule 1. Flags a mocking-library import in
   any shape (`unittest.mock`, the `mock` backport, the
-  `import unittest` → `unittest.mock.patch` reach-through), `pytest.MonkeyPatch`
-  / `MonkeyPatch`, and the `monkeypatch` / `mocker` fixture parameters. Scope is
-  global — domain code has no business importing a mock library either. A wiring
-  test that genuinely must patch a process seam carries `# tessercheck:ignore`.
-- **`TB031` (construction-completeness)** — rule 2. For a spec-constructed
-  type, compares the spec's field set against the fields asserted in its
-  completeness test and flags the difference.
+  `import unittest` → `unittest.mock.patch` reach-through) and
+  `pytest.MonkeyPatch`; the import arms are **global**, because domain code has
+  no business importing a mock library either. The `monkeypatch` / `mocker`
+  **fixture-parameter** arm is narrower on purpose — it fires only inside a
+  pytest-shaped function (`test_*` or a `@fixture` factory), since a parameter
+  with that name anywhere else is an ordinary identifier.
+
+  **The escape hatch, and its one honest use.** A test that must patch a seam it
+  cannot inject through carries `# tessercheck:ignore` (suppression scans the
+  reported statement's whole line span, so it works on a formatter-wrapped
+  import). Today the only sanctioned uses are the composition-root wiring tests
+  in `examples/python-app`, which patch a wiring module's own `build` function
+  to force a partial-failure path — there is no injection point above the
+  composition root, which is exactly why they qualify. Note this is a *narrower*
+  claim than "a process seam": giving `bootstrap` an injectable builder would
+  let those tests use a hand-written double and delete the suppressions
+  entirely. That is tracked as a follow-up, not a blessed pattern to copy.
+- **`TB031` (construction-completeness)** — rule 2. **Not shipped yet:** its
+  contract is fixed by the reviewed fixture pair
+  (`tessercheck-py/testdata/tb031/{good_tree,bad_tree}/`), authored before the
+  checker per the fixtures-first discipline. When it lands it will compare a
+  spec-constructed type's field set against the fields asserted in its
+  completeness test and flag the difference. Until then rule 2 is enforced by
+  review.
 - Rules 3-8 are **guidance, not checked.** Each is either a semantic judgment
   (3, 4, 5) or not mechanically decidable in a way worth the false positives
   (6, 7, 8). That is deliberate: semantic correctness is test territory,

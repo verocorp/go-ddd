@@ -8,14 +8,27 @@ importing a mock library either):
   ``mock`` backport, and the ``import unittest`` → ``unittest.mock.patch``
   attribute-chain evasion;
 * pytest's ``monkeypatch`` builtin and ``MonkeyPatch`` type
-  (``pytest.MonkeyPatch``, ``from pytest import MonkeyPatch``, a bare
-  ``MonkeyPatch`` reference, a ``monkeypatch`` fixture parameter);
+  (``pytest.MonkeyPatch``, ``from pytest import MonkeyPatch``, a
+  ``monkeypatch`` fixture parameter);
 * pytest-mock's ``mocker`` fixture parameter.
 
-A wiring test that genuinely must patch a process seam carries an explicit
-``# tessercheck:ignore`` — a machine directive, comments-norm-exempt. The
-scope is global for the same reason TB020's is: the norm has no test exemption,
-and global scope keeps the ``bad.py`` fixture provable with ``is_test=False``.
+The name can only enter a module through an import or an attribute chain, and
+both are caught above, so there is deliberately no bare-``MonkeyPatch``-Name
+arm: it would add no detection power while emitting a second finding per
+reference and forcing a suppression marker onto every one of those lines.
+
+Two scopes, on purpose. The **import** arms are global — domain and adapter
+code have no business importing a mock library either, and global scope keeps
+the ``bad.py`` fixture provable with ``is_test=False``. The **fixture-parameter**
+arm is the check's one identifier-name signal, so it fires only inside a
+pytest-shaped function (``test_*`` or a ``@fixture``-decorated factory): a
+parameter named ``monkeypatch`` anywhere else is an ordinary name, and flagging
+it would redden conformant code.
+
+A wiring test that must patch a seam it cannot inject through carries an
+explicit ``# tessercheck:ignore`` — a machine directive, comments-norm-exempt.
+Suppression scans the reported node's whole line span, so the marker works on a
+formatter-wrapped import as well as a single-line one.
 """
 
 import ast
@@ -48,9 +61,25 @@ _MONKEYPATCH_MSG = (
 def _fixture_msg(name: str) -> str:
     return (
         f"the {name!r} fixture is banned (fakes-only test-double norm) — inject "
-        "a hand-written fake through the seam instead of a runtime patcher "
-        "(skills/tesser-build/testing.md)"
+        "a hand-written fake through the seam instead of a runtime patcher; a "
+        "wiring test that must patch a seam it cannot inject through carries "
+        "'# tessercheck:ignore' (skills/tesser-build/testing.md)"
     )
+
+
+def _is_pytest_shaped(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A test function, or a fixture factory — the only places a parameter named
+    ``mocker``/``monkeypatch`` is a pytest fixture injection rather than an
+    ordinary identifier."""
+    if node.name.startswith("test_"):
+        return True
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(target, ast.Attribute) and target.attr == "fixture":
+            return True
+        if isinstance(target, ast.Name) and target.id == "fixture":
+            return True
+    return False
 
 
 def check_test_doubles(path: str, source: str, tree: ast.Module) -> list[Finding]:
@@ -58,15 +87,27 @@ def check_test_doubles(path: str, source: str, tree: ast.Module) -> list[Finding
     non-test code alike."""
     lines = source.splitlines()
 
-    def suppressed(line: int) -> bool:
-        return 1 <= line <= len(lines) and _SUPPRESS_MARKER in lines[line - 1]
+    def suppressed(node: ast.AST) -> bool:
+        # Scan the node's whole line span, not just its first line: a
+        # formatter-wrapped `from unittest.mock import (\n ... \n)` reports at
+        # the statement's start, so a marker on the closing line would
+        # otherwise suppress nothing. Every node emitted here is small (an
+        # import statement, an attribute, a name, a single argument), so the
+        # span never widens to a whole function body.
+        start = int(getattr(node, "lineno", 0))
+        end = int(getattr(node, "end_lineno", start) or start)
+        return any(
+            _SUPPRESS_MARKER in lines[line - 1]
+            for line in range(start, end + 1)
+            if 1 <= line <= len(lines)
+        )
 
     findings: list[Finding] = []
 
     def emit(node: ast.AST, message: str) -> None:
         line = int(getattr(node, "lineno", 0))
         col = int(getattr(node, "col_offset", 0)) + 1
-        if suppressed(line):
+        if suppressed(node):
             return
         findings.append(Finding(path, line, col, "TB030", message))
 
@@ -99,15 +140,18 @@ def check_test_doubles(path: str, source: str, tree: ast.Module) -> list[Finding
                 and node.value.id == "pytest"
             ):
                 emit(node, _MONKEYPATCH_MSG)
-        elif isinstance(node, ast.Name) and node.id == "MonkeyPatch":
-            emit(node, _MONKEYPATCH_MSG)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # Scoped to a pytest-shaped function on purpose. This is the one
+            # identifier-NAME signal in the check, and a parameter called
+            # `mocker`/`monkeypatch` is a fixture injection only inside a test
+            # or a fixture factory; anywhere else it is an ordinary name, and
+            # flagging it would redden conformant production code. The
+            # import-based arms above stay global — domain code has no business
+            # importing a mock library either.
+            if not _is_pytest_shaped(node):
+                continue
             args = node.args
-            for arg in (
-                *args.posonlyargs,
-                *args.args,
-                *args.kwonlyargs,
-            ):
+            for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
                 if arg.arg in _FIXTURE_PARAMS:
                     emit(arg, _fixture_msg(arg.arg))
 
