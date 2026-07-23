@@ -191,8 +191,11 @@ root/wiring is correct, the same call in a handler is the leak.
   fake repository that satisfies the repository interface, and the use case runs
   against it — framed as "a test provides its own repo impl", **not** as an
   in-memory-vs-real doctrine.
-- **Bootstrap never reads the environment:** an enforcement test that fails on
-  env access outside the hosts' `main` modules (verified impl:
+- **Bootstrap never reads the environment:** `bootstrap.new` builds from a
+  `Config` it is handed; env decoding is `bootstrap.config.from_env(getenv)`,
+  which consumes an *injected* getter and never calls `os.getenv` itself. An
+  enforcement test fails on `os.getenv`/`os.environ` access outside the hosts'
+  `main` modules (verified impl:
   `examples/python-app/tests/test_enforcement.py`).
 - **The graph is built once:** a host calls `bootstrap.new` exactly once
   (verified impl: `examples/python-app/tests/test_bootstrap_once.py`).

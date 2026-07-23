@@ -5,6 +5,44 @@ Versions follow the 4-digit `MAJOR.MINOR.PATCH.MICRO` format. (This file
 versions the toolkit repo as a whole; `tessercheck-py/pyproject.toml`
 carries the analyzer package's own version — separate streams.)
 
+## [0.0.7.0] - 2026-07-22
+
+The host-lifecycle wave: who owns starting the hosts, and how. Gives the
+worked example a real process lifecycle and a single config loader, reconciles
+the anatomy docs to match, and drops the word "seam" from the vocabulary.
+Merged as #31 (unversioned) and reconciled here after a Codex coherence
+challenge on the skills + example.
+
+### Added
+
+- **Host lifecycle in `examples/python-app`.** A `Host` protocol (`run(stop)`);
+  `srv/http/host.HttpHost` (serve in a thread, drain on stop); and
+  `srv/run.run_until_signal`, which installs SIGINT/SIGTERM and calls
+  `App.close()` in a `finally`. The load-bearing fix: a bare
+  `finally: app.close()` does not survive Python's default SIGTERM, so the old
+  host leaked the graph on a container stop.
+- **One config loader** (`bootstrap/config.from_env(getenv)`): the single place
+  the app reads the environment; `getenv` injected, so it stays pure and
+  testable. Reinstates the shared decoder the docs had wrongly banned. A bad
+  `HTTP_PORT` fails fast with a named error.
+- **`App.close_errors`**: the errors `CleanupStack` collects are retained
+  instead of dropped.
+
+### Changed
+
+- **Anatomy docs reconciled** (`srv.md`, `bootstrap.md`, `map.md`, `python.md`;
+  skill-version 18): the one-loader rule (reverses "no shared decoder"), the
+  `Host`/runner lifecycle and the plain SIGTERM truth, the rule-5
+  platform-sidecar carve-out (which also reconciled `map.md` with `srv.md`), and
+  `App.close_errors`.
+- **Coherence pass (Codex-verified).** Six doc-vs-example overclaims corrected:
+  the host mounts handlers for the contexts it exposes (a single read-model is
+  rendered inline, as the example does); `from_env`'s env-read precision in
+  `srv.md`/`bootstrap.md`; the static-bundle host reconciled with rule 5; and
+  the runner's `close()` now cited to its own test.
+- **"seam" removed** from all skill docs (it named no specific boundary):
+  → "public interface" / "build contract" / "respond path" / "boundary".
+
 ## [0.0.6.0] - 2026-07-21
 
 The serialization wave: how a domain object is built, and how its primitive

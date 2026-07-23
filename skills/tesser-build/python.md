@@ -653,9 +653,11 @@ def main() -> None:
   pure function (`getenv` injected), so it's testable with a dict and the
   env-edge check still holds.
 - **`HttpHost` implements the `Host` contract** (`run(stop)`): it serves in a
-  thread and drains on stop. `make_server` constructs each context's
-  `Handler(app.<context>)` once from the single `App` — no per-request
-  construction — and owns routing + middleware for its mechanism.
+  thread and drains on stop. `make_server` constructs each exposed context's
+  handler once from the single `App` — here the campaign `Handler(app.campaign)`,
+  with the `reports` read-model rendered inline as the host's one read endpoint
+  (the same inline-handler shape the CLI uses for a single operation) — no
+  per-request construction, and owns routing + middleware for its mechanism.
 - **`run_until_signal` owns the process lifecycle**: it installs SIGINT/SIGTERM
   and calls `app.close()` in a `finally`. This is the lifecycle **minimum, and
   it is load-bearing** — a bare `finally: app.close()` does **not** survive
