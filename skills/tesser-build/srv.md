@@ -5,8 +5,10 @@
 An app-wide directory of **hosts, one per delivery mechanism** (recommended
 subdirs `srv/{http,cli,wrk}`, not enforced). A host's `main` is the outermost
 edge of the app: it decodes the environment into the app `Config`, calls
-`bootstrap.new(cfg)` **once**, mounts *its* mechanism's inbound handlers
-across all contexts, applies cross-cutting middleware
+`bootstrap.new(cfg)` **once**, mounts *its* mechanism's inbound handlers for
+the contexts it exposes (a read-model context with a single read may be
+rendered inline rather than via a dedicated handler), applies cross-cutting
+middleware
 (auth/logging/recovery), and owns the process lifecycle. Everything a host
 does is edge work — the moment logic appears in a host that isn't
 env-decoding, mounting, middleware, or lifecycle, it belongs somewhere below.
@@ -37,8 +39,9 @@ Yes → a host.
    (`bootstrap/config.py`), which decodes the environment into the spec-shaped
    app `Config` — app config **and** the host's own launch config (the listen
    addr, the worker cadence) — and hands it to `bootstrap.new`, which validates
-   fail-fast. `from_env` is the **one place the app reads the environment**;
-   nothing below the host reads it (locked by
+   fail-fast. The host's `os.getenv` is the **only environment reference**, and
+   `from_env` is the **one decoder that consumes it** — nothing else below the
+   host calls `os.getenv`/`os.environ` (locked by
    `examples/python-app/tests/test_enforcement.py`). It stays a pure function —
    `getenv` is injected, and it is a module function, not a `Config` method — so
    it is testable with a dict and never a second, hidden config authority. One
@@ -48,8 +51,9 @@ Yes → a host.
    below (same enforcement test) — a library that exits takes the process
    away from the one place entitled to decide that.
 3. **One graph per process; the host owns the lifecycle.** The host calls
-   `bootstrap.new` once at startup (locked by
-   `examples/python-app/tests/test_bootstrap_once.py`) and runs its `Host`
+   `bootstrap.new` once at startup (build-once locked by
+   `examples/python-app/tests/test_bootstrap_once.py`; the runner's guaranteed
+   `close()` by `examples/python-app/tests/test_run.py`) and runs its `Host`
    (`run(stop)` — serve, then drain on stop) under a runner that installs
    SIGINT/SIGTERM and calls `App.close()` in a `finally`
    (`examples/python-app/srv/run.py`, `srv/http/host.py`). Installing the signal
